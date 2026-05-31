@@ -35,7 +35,8 @@ import {
   StrategyFeatured, 
   StrategyHistorical,
   ResourceTopic,
-  ToolTopic
+  ToolTopic,
+  CustomCategory
 } from '../types';
 import { DataAPI } from '../lib/db';
 
@@ -44,7 +45,7 @@ interface AdminPanelProps {
 }
 
 export default function AdminPanel({ currentUser }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'users' | 'meetings' | 'resources' | 'trading'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'meetings' | 'resources' | 'trading' | 'categories'>('users');
   
   // States for DB entity models
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
@@ -55,6 +56,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
   const [hallList, setHallList] = useState<HallOfFameEntry[]>([]);
   const [featuredStrats, setFeaturedStrats] = useState<StrategyFeatured[]>([]);
   const [historicalStrats, setHistoricalStrats] = useState<StrategyHistorical[]>([]);
+  const [customCategoriesList, setCustomCategoriesList] = useState<CustomCategory[]>([]);
   
   // Custom states for dynamic topic creation (Resources and Tools)
   const [resourceTopics, setResourceTopics] = useState<ResourceTopic[]>([]);
@@ -72,6 +74,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
   const [hallForm, setHallForm] = useState<Partial<HallOfFameEntry>>({ studentName: '', title: '', description: '', result: '', date: '', prize: '' });
   const [featuredForm, setFeaturedForm] = useState<Partial<StrategyFeatured>>({ name: '', description: '', parameters: '', author: '', comments: '' });
   const [historicalForm, setHistoricalForm] = useState<Partial<StrategyHistorical>>({ name: '', description: '', parameters: '', author: '', result: '', requiredMonths: 0 });
+  const [categoryNameForm, setCategoryNameForm] = useState('');
   
   // Dynamic topic creator states
   const [resourceTopicForm, setResourceTopicForm] = useState({ title: '', content: '' });
@@ -80,7 +83,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
   // Load lists on init
   const loadAllData = async () => {
     try {
-      const [u, m, n, t, d, h, f, hi, resTopics, tTopics] = await Promise.all([
+      const [u, m, n, t, d, h, f, hi, resTopics, tTopics, cats] = await Promise.all([
         DataAPI.getUsers(),
         DataAPI.getMeetings(),
         DataAPI.getNotices(),
@@ -90,7 +93,8 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
         DataAPI.getStrategiesFeatured(),
         DataAPI.getStrategiesHistorical(),
         DataAPI.getResourceTopics(),
-        DataAPI.getToolTopics()
+        DataAPI.getToolTopics(),
+        DataAPI.getCustomCategories()
       ]);
       setUsersList(u);
       setMeetingsList(m);
@@ -102,6 +106,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
       setHistoricalStrats(hi);
       setResourceTopics(resTopics);
       setToolTopics(tTopics);
+      setCustomCategoriesList(cats);
     } catch (err) {
       console.error("Failed to load admin data", err);
     }
@@ -250,6 +255,40 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
       await DataAPI.deleteToolTopic(id);
       triggerToast("Tema de herramienta eliminado.");
       loadAllData();
+    }
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryNameForm.trim()) return;
+    try {
+      const isDuplicated = customCategoriesList.some(c => c.name.toLowerCase() === categoryNameForm.trim().toLowerCase());
+      if (isDuplicated) {
+        alert("Esta categoría ya existe.");
+        return;
+      }
+      const cat: CustomCategory = {
+        id: 'cat_' + Math.random().toString(36).substr(2, 9),
+        name: categoryNameForm.trim()
+      };
+      await DataAPI.saveCustomCategory(cat);
+      setCategoryNameForm('');
+      triggerToast("Categoría creada con éxito.");
+      loadAllData();
+    } catch (err: any) {
+      alert("Error al guardar categoría: " + err.message);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string, name: string) => {
+    if (confirm(`¿Estás seguro de que deseas eliminar la categoría "${name}"?`)) {
+      try {
+        await DataAPI.deleteCustomCategory(id);
+        triggerToast("Categoría eliminada.");
+        loadAllData();
+      } catch (err: any) {
+        alert("Error al eliminar categoría: " + err.message);
+      }
     }
   };
 
@@ -513,6 +552,13 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
           className={`py-2 px-4 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'trading' ? 'bg-zinc-900 border-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
           <Layers className="w-4 h-4" /> Biblioteca de Trading
+        </button>
+        <button
+          id="tab-btn-categories"
+          onClick={() => setActiveTab('categories')}
+          className={`py-2 px-4 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'categories' ? 'bg-zinc-900 border-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+        >
+          <Layers className="w-4 h-4 text-violet-400" /> Categorías ({customCategoriesList.length})
         </button>
       </div>
 
@@ -1282,6 +1328,54 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {activeTab === 'categories' && (
+        <div id="tab-categories-view" className="bg-zinc-900/20 border border-zinc-850 p-5 rounded-2xl space-y-4">
+          <div>
+            <h3 className="text-sm font-sans font-bold text-white uppercase tracking-wider font-mono">Gestión de Categorías para Recursos y Herramientas</h3>
+            <p className="text-[10px] text-zinc-550 font-mono mt-0.5">Controla las clasificaciones de temas para que crezcan y filtren dinámicamente sin tocar código.</p>
+          </div>
+
+          <form onSubmit={handleSaveCategory} className="flex gap-2 max-w-md">
+            <input
+              type="text"
+              required
+              placeholder="Nueva Categoría (ej: Psicología, NinjaTrader,...)"
+              value={categoryNameForm}
+              onChange={(e) => setCategoryNameForm(e.target.value)}
+              className="flex-grow bg-zinc-950 border border-zinc-805 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-sans"
+            />
+            <button
+              type="submit"
+              className="py-2 px-4 bg-violet-600 hover:bg-violet-550 text-white font-bold rounded-xl text-xs flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> Agregar
+            </button>
+          </form>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
+            {customCategoriesList.length === 0 ? (
+              <p className="text-xs text-zinc-650 italic font-mono uppercase">No hay categorías personalizadas guardadas.</p>
+            ) : (
+              customCategoriesList.map((cat) => (
+                <div
+                  key={cat.id}
+                  className="flex items-center justify-between p-3 bg-zinc-950/40 border border-zinc-900 rounded-xl"
+                >
+                  <span className="font-semibold text-xs text-slate-200">{cat.name}</span>
+                  <button
+                    onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                    className="p-1 text-zinc-500 hover:text-red-400 cursor-pointer"
+                    title="Eliminar categoría"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 

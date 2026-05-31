@@ -46,7 +46,8 @@ import {
   ResourceTopic,
   ToolTopic,
   ResourceReply,
-  ToolReply
+  ToolReply,
+  CustomCategory
 } from '../types';
 
 // Error handling based on firebase-integration skill
@@ -1613,8 +1614,77 @@ export const DataAPI = {
         window.dispatchEvent(new Event('storage'));
       }
     }
+  },
+
+  getCustomCategories: async (): Promise<CustomCategory[]> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        const snap = await getDocs(collection(db, 'custom_categories'));
+        const list = snap.docs.map(doc => doc.data() as CustomCategory);
+        if (list.length === 0) {
+          for (const c of SEED_CUSTOM_CATEGORIES) {
+            await setDoc(doc(db, 'custom_categories', c.id), c);
+          }
+          return SEED_CUSTOM_CATEGORIES;
+        }
+        return list;
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, 'custom_categories');
+        return SEED_CUSTOM_CATEGORIES;
+      }
+    } else {
+      return getLocal<CustomCategory[]>('custom_categories', SEED_CUSTOM_CATEGORIES);
+    }
+  },
+
+  saveCustomCategory: async (category: CustomCategory): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'custom_categories', category.id), category);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `custom_categories/${category.id}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<CustomCategory[]>('custom_categories', SEED_CUSTOM_CATEGORIES);
+      const idx = list.findIndex(c => c.id === category.id);
+      if (idx !== -1) {
+        list[idx] = category;
+      } else {
+        list.push(category);
+      }
+      setLocal('custom_categories', list);
+      window.dispatchEvent(new Event('storage'));
+    }
+  },
+
+  deleteCustomCategory: async (id: string): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'custom_categories', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `custom_categories/${id}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<CustomCategory[]>('custom_categories', SEED_CUSTOM_CATEGORIES);
+      const filtered = list.filter(c => c.id !== id);
+      setLocal('custom_categories', filtered);
+      window.dispatchEvent(new Event('storage'));
+    }
   }
 };
+
+export const SEED_CUSTOM_CATEGORIES: CustomCategory[] = [
+  { id: 'cat_herramientas', name: 'Herramientas', createdAt: new Date().toISOString() },
+  { id: 'cat_estrategias', name: 'Estrategias', createdAt: new Date().toISOString() },
+  { id: 'cat_psicologia', name: 'Psicología', createdAt: new Date().toISOString() },
+  { id: 'cat_ia', name: 'IA', createdAt: new Date().toISOString() },
+  { id: 'cat_ninjatrader', name: 'NinjaTrader', createdAt: new Date().toISOString() },
+  { id: 'cat_tradingview', name: 'TradingView', createdAt: new Date().toISOString() },
+  { id: 'cat_recursos_premium', name: 'Recursos Premium', createdAt: new Date().toISOString() },
+  { id: 'cat_comunidad', name: 'Comunidad', createdAt: new Date().toISOString() }
+];
 
 export const SEED_CHAT_CHANNELS: ChatChannel[] = [
   { id: 'general', name: 'general', category: 'Chat·General', onlyStaffCanWrite: false, createdAt: new Date().toISOString() },

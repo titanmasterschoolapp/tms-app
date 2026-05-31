@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'alumno' | 'miembro' | 'moderador' | 'colaborador' | 'administrador';
+export type UserRole = 'alumno' | 'miembro' | 'moderador' | 'colaborador' | 'administrador' | 'none';
 
 export interface UserProfile {
   uid: string;
@@ -68,6 +68,14 @@ export interface ResourceTopic {
   isReleased?: boolean;
   releasedTo?: 'todos' | 'alumno' | 'miembro' | 'staff';
   replies?: ResourceReply[];
+  
+  // Dynamic controls
+  pinned?: boolean;
+  orderIndex?: number;
+  commentsAllowed?: boolean; // false means read-only
+  commentsTarget?: 'todos' | 'alumno' | 'staff'; // restrict writer roles
+  isPrivate?: boolean; // resource is private (vs public)
+  category?: string; // category classification name/id
 }
 
 export interface ToolReply {
@@ -87,6 +95,14 @@ export interface ToolTopic {
   isReleased?: boolean;
   releasedTo?: 'todos' | 'alumno' | 'miembro' | 'staff';
   replies?: ToolReply[];
+
+  // Dynamic controls
+  pinned?: boolean;
+  orderIndex?: number;
+  commentsAllowed?: boolean;
+  commentsTarget?: 'todos' | 'alumno' | 'staff';
+  isPrivate?: boolean;
+  category?: string;
 }
 
 export interface Meeting {
@@ -169,4 +185,10 @@ export interface AppNotification {
   type: 'meeting' | 'notice' | 'strategy';
   createdAt: string;
   read: boolean;
+}
+
+export interface CustomCategory {
+  id: string;
+  name: string;
+  createdAt: string;
 }

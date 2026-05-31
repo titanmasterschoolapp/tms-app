@@ -55,6 +55,7 @@ import { DataAPI } from './lib/db';
 import { isFirebaseConfigured } from './firebase';
 
 import CalculadoraLotes from './components/CalculadoraLotes';
+import CalculadoraApalancamiento from './components/CalculadoraApalancamiento';
 import ControlPanel from './components/ControlPanel';
 import ChatPanel from './components/ChatPanel';
 import AdminPanel from './components/AdminPanel';
@@ -265,6 +266,7 @@ export default function App() {
   const alumnoMeetings = meetings.filter(m => m.type === 'alumno');
   const comunidadMeetings = meetings.filter(m => m.type === 'mensualidad');
 
+  const isSinRol = !user?.role || user?.role === 'none';
   const hasPayingAccess = ['administrador', 'colaborador'].includes(user?.role || '') || (['miembro', 'moderador'].includes(user?.role || '') && !!(user?.subscription || user?.mensualidadActive));
 
   if (loading) {
@@ -665,14 +667,14 @@ export default function App() {
                     { view: 'pupil_panel', label: 'Panel principal', icon: BookOpen },
                     { view: 'pupil_chat', label: 'Chat general', icon: MessageSquare, isChat: true },
                     { view: 'pupil_resources', label: 'Recursos', icon: BookMarked },
-                    { view: 'pupil_tools', label: 'Herramientas', icon: Wrench },
+                    { view: 'pupil_tools', label: isSinRol ? 'Calculadoras' : 'Herramientas', icon: Wrench },
                     { view: 'pupil_discounts', label: 'Descuentos y cupones', icon: Tag },
                     { view: 'pupil_meetings', label: 'Sesiones Zoom/Meet', icon: Video, isMeeting: true },
                     { view: 'pupil_notices', label: 'Avisos', icon: Info }
                   ].filter(item => {
-                    // Sin rol can only access Herramientas and Descuentos
-                    if (user?.role === null) {
-                      return ['pupil_tools', 'pupil_discounts'].includes(item.view);
+                    // Sin rol can only access Panel and Calculadoras
+                    if (isSinRol) {
+                      return ['pupil_panel', 'pupil_tools'].includes(item.view);
                     }
                     // Alumno has no access to Chats or Reuniones (Meetings)
                     if (user?.role === 'alumno') {
@@ -709,7 +711,7 @@ export default function App() {
               </div>
 
               {/* SECCIÓN B: COMUNIDAD/MENSUALIDAD NAV */}
-              {user?.role !== null && (
+              {!isSinRol && (
                 <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
                   <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between">
                     <span className="text-[10px] text-slate-550 font-mono font-bold tracking-widest uppercase">COMUNIDAD</span>
@@ -817,7 +819,7 @@ export default function App() {
           <main className="lg:col-span-9 space-y-8">
             
             {/* VIEW A.1: PANEL PRINCIPAL / DASHBOARD */}
-            {activeView === 'pupil_panel' && user?.role === null && (
+            {activeView === 'pupil_panel' && isSinRol && (
               <div id="sin-rol-dashboard" className="p-8 bg-[#0A0A0B] border border-white/5 rounded-3xl relative overflow-hidden text-center space-y-6">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-purple-500/5 rounded-full blur-3xl" />
                 
@@ -825,45 +827,44 @@ export default function App() {
                   <div className="inline-flex p-3 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-2xl animate-pulse mb-2">
                     <ShieldAlert className="w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-bold font-heading text-white tracking-tight">Disponible para alumnos de Titan Master School.</h3>
+                  <h3 className="text-xl font-bold font-heading text-white tracking-tight">Tu cuenta está pendiente de aprobación por parte de un administrador.</h3>
                   <p className="text-xs text-slate-400 leading-relaxed font-sans">
-                    Tu usuario aún no ha sido aprobado o asignado a un grupo académico. Puedes acceder únicamente a las calculadoras de trading y a los cupones de descuento mientras un Director Académico aprueba tu cuenta.
+                    Tu usuario aún no ha sido aprobado o asignado a un grupo académico. Puedes acceder únicamente a las calculadoras de trading mientras un Director Académico aprueba tu cuenta.
                   </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                  <button
-                    id="sin-rol-goto-tools"
-                    onClick={() => setActiveView('pupil_tools')}
-                    className="w-full sm:w-auto py-2.5 px-5 bg-purple-600 hover:bg-purple-550 text-white font-bold rounded-xl text-xs transition-colors shadow-lg cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <Wrench className="w-4 h-4" />
-                    <span>Ver Herramientas Habilitadas</span>
-                  </button>
-                  
-                  <button
-                    id="sin-rol-goto-discounts"
-                    onClick={() => setActiveView('pupil_discounts')}
-                    className="w-full sm:w-auto py-2.5 px-5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <Tag className="w-4 h-4" />
-                    <span>Ver Convenios y Cupones</span>
-                  </button>
+                <div className="border-t border-white/5 pt-6 mt-6">
+                  <span className="text-[10px] text-purple-400 font-mono font-bold uppercase tracking-widest block mb-4 text-center">Calculadoras Habilitadas</span>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-left">
+                    <CalculadoraLotes />
+                    <CalculadoraApalancamiento />
+                  </div>
                 </div>
               </div>
             )}
 
-            {activeView === 'pupil_panel' && user?.role !== null && (
+            {activeView === 'pupil_panel' && !isSinRol && (
               <div id="pupil-dashboard-view" className="space-y-6">
                 
                 {/* School Greeting card */}
                 <div className="bg-gradient-to-br from-[#121214] to-[#0A0A0B] border border-white/5 p-6 rounded-3xl relative overflow-hidden flex flex-col justify-between">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/10 blur-[80px] rounded-full -mr-20 -mt-20"></div>
                   
-                  <div className="space-y-2 relative z-10">
-                    <span className="text-[9px] text-purple-400 font-mono font-bold uppercase tracking-widest block">BIENVENIDO DE VUELTA</span>
-                    <h2 className="text-2xl font-bold font-heading text-white tracking-tight">A Titan Master School, {user.displayName}</h2>
-                    <p className="text-slate-350 text-xs leading-relaxed max-w-xl">Tienes estatus académico de <strong>{(user.role || 'sin rol').toUpperCase()}</strong>. Este portal te permite consultar transmisiones, debatir en los canales comunitarios del chat general y descargar materiales de alto rendimiento.</p>
+                  <div className="space-y-3 relative z-10">
+                    <div>
+                      <span className="text-[10px] text-purple-400 font-mono font-bold uppercase tracking-widest block mb-1">Bienvenido de vuelta a</span>
+                      <h1 className="text-3xl md:text-4xl font-black font-heading text-white tracking-tight uppercase leading-none">
+                        TITAN MASTER SCHOOL
+                      </h1>
+                      <div className="text-xl md:text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-pink-400 tracking-tight mt-1">
+                        {user.displayName}
+                      </div>
+                    </div>
+                    {['administrador', 'moderador', 'colaborador'].includes(user.role) && (
+                      <p className="text-slate-350 text-xs leading-relaxed max-w-xl font-sans mt-2">
+                        Tienes estatus académico de <strong>{user.role.toUpperCase()}</strong>. Este portal te permite consultar transmisiones, debatir en los canales comunitarios del chat general y descargar materiales de alto rendimiento.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -880,7 +881,7 @@ export default function App() {
                     <div className={`text-lg font-bold font-sans ${user.mensualidadActive ? 'text-emerald-400' : 'text-pink-400'}`}>
                       {user.mensualidadActive ? 'Mensualidad Activa' : 'Suscripción Básica'}
                     </div>
-                    <p className="text-[10px] text-slate-550">Permite ver la sala Comunidad VIP y estrategias pro.</p>
+                    <p className="text-[10px] text-slate-550 font-sans">Permite acceder a Comunidad y Estrategias Pro.</p>
                   </div>
 
                   <div className="p-4 bg-[#0A0A0B] border border-white/5 rounded-2xl space-y-1 shadow-sm">
@@ -933,6 +934,64 @@ export default function App() {
                     </button>
                   </div>
 
+                </div>
+
+                {/* Partners & Funding Deals section */}
+                <div className="bg-[#0A0A0B] border border-white/5 p-5 rounded-2xl space-y-4">
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-white/5">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">Convenios de Fondeo & Partners Oficiales</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* APEX DEALS */}
+                    <div className="p-4 bg-zinc-950/50 border border-zinc-900 rounded-xl flex flex-col justify-between space-y-3 text-left">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <span className="text-xs font-black text-rose-450 font-sans tracking-wide">APEX TRADING FUNDING</span>
+                          <span className="text-[9px] bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full font-bold uppercase font-mono">CUPÓN: TMS</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 mt-1 font-sans leading-relaxed">
+                          La firma de fondeo de futuros líder. Obtén un descuento exclusivo del 80%-90% en tus cuentas de evaluación usando nuestro código promocional verificado escolar.
+                        </p>
+                      </div>
+                      <div className="pt-2 flex items-center justify-between border-t border-white/5">
+                        <span className="text-[10px] text-zinc-500 font-mono">Código Promocional: <strong className="text-white selection:bg-pink-500 font-mono">TMS</strong></span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText('TMS');
+                            alert('¡Código de descuento "TMS" copiado!');
+                          }}
+                          className="px-2.5 py-1 bg-rose-600/10 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-bold uppercase hover:bg-rose-550/20 cursor-pointer transition-all"
+                        >
+                          Copiar Código
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* EARN2TRADE DEALS */}
+                    <div className="p-4 bg-zinc-950/50 border border-zinc-900 rounded-xl flex flex-col justify-between space-y-3 text-left">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <span className="text-xs font-black text-amber-400 font-sans tracking-wide">EARN2TRADE</span>
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full font-bold uppercase font-mono">PROMO ACTIVA</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 mt-1 font-sans leading-relaxed">
+                          Accede al programa Trader Career Path o Gauntlet Mini de forma preferencial. Evaluaciones profesionales en futuros con reglas claras de consistencia y soporte premium.
+                        </p>
+                      </div>
+                      <div className="pt-2 border-t border-white/5">
+                        <a 
+                          href="https://www.earn2trade.com/es/non-us?a_pid=the_scalper" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="w-full py-1.5 px-3 bg-amber-500 hover:bg-amber-450 text-black rounded-lg text-[10px] font-bold uppercase text-center block transition-all hover:scale-[1.01]"
+                        >
+                          Click en el enlace ↗
+                        </a>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
               </div>
@@ -1314,7 +1373,7 @@ export default function App() {
 
                             {/* Text message */}
                             <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                              Hola alumnos y miembros de Titan. Aquí les dejo el convenio oficial que hemos firmado con la firma de <strong>{currentTopic.title}</strong>. Tienen a su disposición un beneficio directo aplicando nuestro enlace de afiliado formal y el cupón activo escolar:
+                              Hola alumnos y miembros de Titan. Aquí les dejo el convenio oficial que hemos firmado con la firma de <strong>{currentTopic.title}</strong>. Tienen a su disposición un beneficio directo aplicando nuestro enlace de afiliado formal y el código de descuento activo escolar:
                             </p>
 
                             {/* Gorgeous Embed Block */}
@@ -1338,7 +1397,7 @@ export default function App() {
                               {/* Copiar Code Section */}
                               <div className="grid grid-cols-1 p-3 bg-[#0A0A0B] rounded-xl border border-white/5 gap-3 sm:grid-cols-2 items-center text-left">
                                 <div>
-                                  <span className="text-[9px] text-slate-500 font-mono block">CÓDIGO DE CUPÓN DIRECTO:</span>
+                                  <span className="text-[9px] text-slate-500 font-mono block">CÓDIGO DE DESCUENTO DIRECTO:</span>
                                   <span className="text-sm font-bold font-mono tracking-widest text-white selection:bg-pink-500">{currentTopic.code}</span>
                                 </div>
                                 <button
@@ -1380,36 +1439,6 @@ export default function App() {
                             </div>
                           </div>
                         </div>
-
-                        {/* Interactive Discussion Section Divider */}
-                        {currentTopic.replies && currentTopic.replies.length > 0 && (
-                          <div className="relative pt-4 selection:bg-purple-500/30">
-                            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                              <div className="w-full border-t border-white/5"></div>
-                            </div>
-                            <div className="relative flex justify-start text-[10px] font-mono select-none">
-                              <span className="bg-[#0A0A0B] pr-3 text-slate-500 uppercase tracking-widest">💬 Conversaciones sobre el cupón</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Real-looking student replies container */}
-                        {currentTopic.replies &&
-                          currentTopic.replies.map((reply, index) => (
-                            <div id={`reply-${currentTopic.id}-${index}`} key={index} className="flex gap-4 items-start pl-4 border-l border-white/5 py-1 text-left animate-in fade-in duration-200 select-none">
-                              <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${reply.avatarColor} text-white font-mono text-[10px] font-bold flex items-center justify-center shadow`}>
-                                {reply.avatar}
-                              </div>
-                              <div className="space-y-1 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-slate-305">{reply.userName}</span>
-                                  <span className="text-[8px] bg-white/5 text-slate-400 py-0.5 px-1 pr-1.5 rounded uppercase font-mono">{reply.userRole}</span>
-                                  <span className="text-[8px] text-slate-500 font-mono">{reply.time}</span>
-                                </div>
-                                <p className="text-[11px] text-slate-400 leading-relaxed font-sans">{reply.text}</p>
-                              </div>
-                            </div>
-                          ))}
 
                       </div>
                     </div>
@@ -1767,8 +1796,11 @@ export default function App() {
             isFirebase={isFirebaseConfigured}
           />
         )}
-        <div className="text-center mt-6 text-[11px] text-slate-650 font-mono">
-          © 2026 Titan Master School. Todos los derechos reservados.
+        <div className="text-center mt-6 text-[11px] text-gray-400 font-sans space-y-1">
+          <div>Titan Master School · Todos los derechos reservados</div>
+          <div className="text-[10px] text-gray-500">
+            Diseñado y desarrollado por <a href="https://presenciadenegocio.com" target="_blank" rel="noopener noreferrer" className="hover:text-purple-400 font-medium transition-colors underline decoration-dotted">PresenciaDeNegocio.com</a>
+          </div>
         </div>
       </footer>
 

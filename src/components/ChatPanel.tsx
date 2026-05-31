@@ -56,6 +56,10 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
   const [formOnlyStaff, setFormOnlyStaff] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isInitialLoad = useRef<boolean>(true);
+  const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
+  const [previousMessagesLength, setPreviousMessagesLength] = useState(0);
   const isStaff = ['administrador', 'colaborador', 'moderador'].includes(currentUser.role);
 
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
@@ -152,10 +156,47 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
     };
   }, [activeChannelId, channels, currentUser.role, isStaff]);
 
-  // Keep scroll focused down
+  // Reset initial load state when channel changes to ensure it opens scrolled down initially
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    isInitialLoad.current = true;
+    setShowNewMessageIndicator(false);
+  }, [activeChannelId]);
+
+  // Keep scroll conditionally focused down or display new message indicators
+  useEffect(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+
+    if (isInitialLoad.current) {
+      el.scrollTop = el.scrollHeight;
+      isInitialLoad.current = false;
+      setShowNewMessageIndicator(false);
+      setPreviousMessagesLength(messages.length);
+      return;
+    }
+
+    if (messages.length > previousMessagesLength) {
+      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
+      if (isAtBottom) {
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 50);
+        setShowNewMessageIndicator(false);
+      } else {
+        setShowNewMessageIndicator(true);
+      }
+    }
+    setPreviousMessagesLength(messages.length);
   }, [messages]);
+
+  const handleScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (isAtBottom) {
+      setShowNewMessageIndicator(false);
+    }
+  };
 
   // Helper helper to evaluate if a user can read a channel category
   const getHasReadAccess = (category: 'Chat·General' | 'Comunidad' | 'Claustro', role: UserRole): boolean => {
@@ -722,7 +763,24 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
         ) : (
           /* Conversation messages container */
           <>
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div 
+              ref={chatContainerRef} 
+              onScroll={handleScroll} 
+              className="flex-1 overflow-y-auto p-4 space-y-4 relative"
+            >
+              {showNewMessageIndicator && (
+                <div className="sticky bottom-2 left-1/2 transform -translate-x-1/2 z-30">
+                  <button 
+                    onClick={() => {
+                      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                      setShowNewMessageIndicator(false);
+                    }}
+                    className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-[0_4px_12px_rgba(139,92,246,0.3)] animate-pulse border border-violet-400/20 cursor-pointer"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 animate-bounce" /> Nuevos mensajes abajo ↓
+                  </button>
+                </div>
+              )}
               {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
                   <MessageSquare className="w-9 h-9 text-zinc-800" />

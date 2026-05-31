@@ -1,10 +1,9 @@
 {
-  "projectId": "zinc-acolyte-ccf5x",
-  "appId": "1:340580636280:web:d9d3dc932f57362c7dff8d",
-  "apiKey": "AIzaSyBBWo6fWmDAq3vA_jkvGeKD4OMf-mKbhVA",
-  "authDomain": "zinc-acolyte-ccf5x.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-e1f874b8-ac0c-4e1f-a8be-32b4d75b2499",
-  "storageBucket": "zinc-acolyte-ccf5x.firebasestorage.app",
-  "messagingSenderId": "340580636280",
+  "projectId": "tms-app-18d8e",
+  "appId": "1:254175363696:web:14fa3672df44e94b196ab5",
+  "apiKey": "AIzaSyD2RqZMMB_B0qU0lrh1GAxfJ8HbRdmKx7g",
+  "authDomain": "tms-app-18d8e.firebaseapp.com",
+  "storageBucket": "tms-app-18d8e.firebasestorage.app",
+  "messagingSenderId": "254175363696",
   "measurementId": ""
 }

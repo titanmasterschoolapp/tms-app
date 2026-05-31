@@ -1,0 +1,367 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with roles and subscription access in Titan Master School.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth unique ID."
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["alumno", "miembro", "moderador", "colaborador", "administrador"],
+          "description": "Access control role of the user."
+        },
+        "mensualidadActive": {
+          "type": "boolean",
+          "description": "Whether the user's community monthly subscription is active."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "User registration timestamp."
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The exact date user joined the school used for seniority calculations (1-2-3-6 months)."
+        }
+      },
+      "required": ["uid", "email", "role", "mensualidadActive", "createdAt", "joinedAt"]
+    },
+    "ChatChannel": {
+      "title": "ChatChannel",
+      "description": "A live chat channel category created by staff moderates.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Chat·General", "Comunidad", "Claustro"]
+        },
+        "onlyStaffCanWrite": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "category", "onlyStaffCanWrite", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A public chat message inside Alumno or Comunidad chats.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "userName": {
+          "type": "string"
+        },
+        "userRole": {
+          "type": "string"
+        },
+        "chatType": {
+          "type": "string",
+          "enum": ["alumno", "comunidad"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "hidden"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "replies": {
+          "type": "array",
+          "description": "Flat list of inline replies in the comment thread."
+        }
+      },
+      "required": ["id", "text", "userId", "userName", "userRole", "chatType", "status", "createdAt"]
+    },
+    "Meeting": {
+      "title": "Meeting",
+      "description": "A Zoom or Google Meet session scheduled by team members.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "link": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["alumno", "mensualidad"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "title", "date", "time", "link", "type", "createdAt"]
+    },
+    "Notice": {
+      "title": "Notice",
+      "description": "Important notice or announcement for Titan Master members.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "urgent": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "title", "content", "createdAt"]
+    },
+    "HallOfFame": {
+      "title": "HallOfFame",
+      "description": "Traders spotlight with exceptional strategies or performance.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "studentName": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "chartImage": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "prize": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "studentName", "title", "description", "result", "date", "createdAt"]
+    },
+    "StrategyFeatured": {
+      "title": "StrategyFeatured",
+      "description": "Strategies hand-picked or highlighted by the education team.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "string"
+        },
+        "chartImage": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "comments": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "description", "parameters", "date", "createdAt"]
+    },
+    "StrategyHistorical": {
+      "title": "StrategyHistorical",
+      "description": "Historical winning strategy library unlocked by member seniority.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "string"
+        },
+        "chartImage": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "requiredMonths": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "description", "parameters", "requiredMonths", "createdAt"]
+    },
+    "Tool": {
+      "title": "Tool",
+      "description": "Trading helper tool or download.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "link": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "description", "link", "createdAt"]
+    },
+    "Discount": {
+      "title": "Discount",
+      "description": "Special trading discounts for prop firms or tools.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "link": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["fondeo", "herramientas"]
+        },
+        "code": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "description", "link", "category", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles containing roles and access properties."
+    },
+    "/chat_messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Direct and public community chat messages mapped to a chatType."
+    },
+    "/chat_channels/{channelId}": {
+      "schema": "ChatChannel",
+      "description": "Chat channels created dynamically by staff or administrators."
+    },
+    "/meetings/{meetingId}": {
+      "schema": "Meeting",
+      "description": "Virtual trade training sessions run on Zoom or Meet."
+    },
+    "/notices/{noticeId}": {
+      "schema": "Notice",
+      "description": "Urgent announcements broadcasted to all students."
+    },
+    "/hall_of_fame/{hallOfFameId}": {
+      "schema": "HallOfFame",
+      "description": "Spotlight entries of successful traders."
+    },
+    "/strategies_featured/{strategyId}": {
+      "schema": "StrategyFeatured",
+      "description": "Education team's selected trading systems."
+    },
+    "/strategies_historical/{strategyId}": {
+      "schema": "StrategyHistorical",
+      "description": "Trading library unlocked by months of registration."
+    },
+    "/tools/{toolId}": {
+      "schema": "Tool",
+      "description": "General trading utilities provided to students."
+    },
+    "/discounts/{discountId}": {
+      "schema": "Discount",
+      "description": "Exclusive prop-firm and charting software promos."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Titan Master School",
+  "description": "Portal privado premium para alumnos y miembros de la comunidad de trading Titan Master School, con chats comunitarios, recursos, estrategias y gestión de mensualidades.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

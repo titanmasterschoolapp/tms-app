@@ -1,0 +1,207 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Catch-all Deny Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Since token custom claims are not guaranteed, we query the DB
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasUserDoc() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isUserRole(role) {
+      return isSignedIn() && hasUserDoc() && getUserData().role == role;
+    }
+
+    function isAdmin() {
+      return isUserRole('administrador') || (isSignedIn() && request.auth.token.email != null && request.auth.token.email.matches('(?i)m\\.scalpernq@gmail\\.com'));
+    }
+
+    function isColaborador() {
+      return isAdmin() || isUserRole('colaborador');
+    }
+
+    function isModerador() {
+      return isColaborador() || isUserRole('moderador');
+    }
+
+    function hasMensualidad() {
+      return isColaborador() || (isSignedIn() && hasUserDoc() && getUserData().mensualidadActive == true);
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation blueprints
+    function isValidUser(data) {
+      return data.uid is string &&
+             data.email is string &&
+             data.displayName is string &&
+             data.role in ['alumno', 'miembro', 'moderador', 'colaborador', 'administrador'] &&
+             data.mensualidadActive is bool;
+    }
+
+    function isValidChatMessage(data) {
+      return data.id is string &&
+             data.text is string &&
+             data.text.size() <= 2000 &&
+             data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.userName is string &&
+             data.userRole is string &&
+             data.chatType in ['alumno', 'comunidad'] &&
+             data.status in ['active', 'hidden', 'pending_review'];
+    }
+
+    function isValidMeeting(data) {
+      return data.id is string &&
+             data.title is string &&
+             data.title.size() <= 200 &&
+             data.date is string &&
+             data.time is string &&
+             data.link is string &&
+             data.type in ['alumno', 'mensualidad'];
+    }
+
+    function isValidNotice(data) {
+      return data.id is string &&
+             data.title is string &&
+             data.title.size() <= 200 &&
+             data.content is string &&
+             data.content.size() <= 5000;
+    }
+
+    function isValidChatChannel(data) {
+      return data.id is string &&
+             data.name is string &&
+             data.category in ['Chat·General', 'Comunidad', 'Claustro'] &&
+             data.onlyStaffCanWrite is bool &&
+             data.createdAt is string;
+    }
+
+    // Rules matching each collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      // On create, allow user to make their own profile but with student/member default unless admin
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
+      // On update, user can edit display name, or admins can edit fields including roles
+      allow update: if isSignedIn() && (
+        isAdmin() || isColaborador() || (
+          isOwner(userId) && 
+          isValidUser(incoming()) && 
+          incoming().role == existing().role && 
+          incoming().mensualidadActive == existing().mensualidadActive
+        )
+      );
+      allow delete: if isAdmin() || isColaborador();
+    }
+
+    match /chat_channels/{channelId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isModerador() && isValidId(channelId) && isValidChatChannel(incoming());
+      allow delete: if isSignedIn() && isModerador() && isValidId(channelId);
+    }
+
+    match /chat_messages/{messageId} {
+      allow read: if isSignedIn() && (
+        existing().chatType == 'alumno' || hasMensualidad()
+      );
+      allow create: if isSignedIn() && isValidChatMessage(incoming()) && (
+        incoming().chatType == 'alumno' || hasMensualidad()
+      );
+      // Update: Users can reply (adding entries to 'replies') or edit their text, mods can change status/hide messages
+      allow update: if isSignedIn() && (
+        isModerador() || (
+          existing().userId == request.auth.uid && 
+          isValidChatMessage(incoming()) && 
+          incoming().chatType == existing().chatType &&
+          incoming().userId == existing().userId
+        ) || (
+          // Allowing replies to be appended by standard users who have access
+          (existing().chatType == 'alumno' || hasMensualidad()) &&
+          incoming().id == existing().id &&
+          incoming().text == existing().text &&
+          incoming().userId == existing().userId &&
+          incoming().chatType == existing().chatType &&
+          incoming().status == existing().status
+        )
+      );
+      allow delete: if isModerador();
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if isSignedIn() && (
+        existing().type == 'alumno' || hasMensualidad()
+      );
+      allow write: if isColaborador();
+    }
+
+    match /notices/{noticeId} {
+      allow read: if isSignedIn();
+      allow write: if isColaborador();
+    }
+
+    match /hall_of_fame/{hallOfFameId} {
+      allow read: if isSignedIn() && hasMensualidad();
+      allow write: if isColaborador();
+    }
+
+    match /strategies_featured/{strategyId} {
+      allow read: if isSignedIn() && hasMensualidad();
+      allow write: if isColaborador();
+    }
+
+    match /strategies_historical/{strategyId} {
+      // Historical strategies are available to paying community members
+      allow read: if isSignedIn() && hasMensualidad();
+      allow write: if isColaborador();
+    }
+
+    match /tools/{toolId} {
+      allow read: if isSignedIn();
+      allow write: if isColaborador();
+    }
+
+    match /discounts/{discountId} {
+      allow read: if isSignedIn();
+      allow write: if isColaborador();
+    }
+
+    match /resource_topics/{topicId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isColaborador();
+      allow update: if isColaborador() || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['replies']));
+    }
+
+    match /tool_topics/{topicId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isColaborador();
+      allow update: if isColaborador() || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['replies']));
+    }
+  }
+}

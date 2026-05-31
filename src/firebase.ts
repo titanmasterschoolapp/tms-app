@@ -26,8 +26,13 @@ if (isFirebaseConfigured) {
     } else {
       app = getApp();
     }
-    // Bind database ID if provided
-    db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || undefined);
+    // Bind database ID - fallback to the requested existing database ID
+    const firestoreDatabaseId = (firebaseConfig as any).firestoreDatabaseId || 'ai-studio-e1f874b8-ac0c-4e1f-a8be-32b4d75b2499';
+    
+    console.log("Project:", app.options.projectId);
+    console.log("Firestore Database:", firestoreDatabaseId);
+
+    db = getFirestore(app, firestoreDatabaseId);
     auth = getAuth(app);
   } catch (error) {
     console.error("Firebase initialization failed dynamically", error);

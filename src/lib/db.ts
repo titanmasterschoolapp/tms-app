@@ -354,17 +354,33 @@ export const DataAPI = {
           try {
             const userSnap = await getDoc(userDocRef);
             if (userSnap.exists()) {
-              callback(userSnap.data() as UserProfile);
+              const uData = userSnap.data();
+              const profile: UserProfile = {
+                uid: fbUser.uid,
+                email: fbUser.email || uData.email || '',
+                displayName: uData.displayName || fbUser.displayName || 'User',
+                role: uData.role !== undefined ? uData.role : null,
+                mensualidadActive: uData.mensualidadActive !== undefined ? !!uData.mensualidadActive : false,
+                subscription: uData.subscription !== undefined ? !!uData.subscription : (uData.mensualidadActive !== undefined ? !!uData.mensualActive : false),
+                approved: uData.approved !== undefined ? !!uData.approved : false,
+                avatarUrl: uData.avatarUrl || undefined,
+                manualUnlocks: uData.manualUnlocks || [],
+                createdAt: uData.createdAt || new Date().toISOString(),
+                joinedAt: uData.joinedAt || new Date().toISOString()
+              };
+              callback(profile);
             } else {
               // Create default profile for newly logged in Firebase user
               // Auto admin if matched with our user's email
-              const isDefaultAdmin = fbUser.email === 'm.scalpernq@gmail.com';
+              const isDefaultAdmin = fbUser.email?.toLowerCase() === 'm.scalpernq@gmail.com';
               const newProfile: UserProfile = {
                 uid: fbUser.uid,
                 email: fbUser.email || '',
                 displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-                role: isDefaultAdmin ? 'administrador' : 'alumno',
+                role: isDefaultAdmin ? 'administrador' : null,
                 mensualidadActive: isDefaultAdmin ? true : false,
+                subscription: isDefaultAdmin ? true : false,
+                approved: isDefaultAdmin ? true : false,
                 createdAt: new Date().toISOString(),
                 joinedAt: new Date().toISOString()
               };
@@ -374,12 +390,15 @@ export const DataAPI = {
           } catch (err) {
             console.error("Error reading Firebase user document", err);
             // Default user fallback inside Firebase context
+            const isDefaultAdmin = fbUser.email?.toLowerCase() === 'm.scalpernq@gmail.com';
             callback({
               uid: fbUser.uid,
               email: fbUser.email || '',
               displayName: fbUser.displayName || 'User',
-              role: fbUser.email === 'm.scalpernq@gmail.com' ? 'administrador' : 'alumno',
-              mensualidadActive: fbUser.email === 'm.scalpernq@gmail.com',
+              role: isDefaultAdmin ? 'administrador' : null,
+              mensualidadActive: isDefaultAdmin ? true : false,
+              subscription: isDefaultAdmin ? true : false,
+              approved: isDefaultAdmin ? true : false,
               createdAt: new Date().toISOString(),
               joinedAt: new Date().toISOString()
             });
@@ -395,7 +414,13 @@ export const DataAPI = {
         if (loggedId) {
           const users = getLocal<UserProfile[]>('users', []);
           const activeUser = users.find(u => u.uid === loggedId);
-          callback(activeUser || null);
+          if (activeUser) {
+            activeUser.subscription = activeUser.subscription !== undefined ? activeUser.subscription : !!activeUser.mensualidadActive;
+            activeUser.approved = activeUser.approved !== undefined ? activeUser.approved : false;
+            callback(activeUser);
+          } else {
+            callback(null);
+          }
         } else {
           callback(null);
         }
@@ -411,6 +436,8 @@ export const DataAPI = {
             displayName: 'Mario Scalper',
             role: 'administrador',
             mensualidadActive: true,
+            subscription: true,
+            approved: true,
             createdAt: new Date(Date.now() - 3600000 * 24 * 40).toISOString(), // 40 days ago
             joinedAt: new Date(Date.now() - 3600000 * 24 * 40).toISOString()
           },
@@ -420,6 +447,8 @@ export const DataAPI = {
             displayName: 'Eduardo Trader',
             role: 'miembro',
             mensualidadActive: true,
+            subscription: true,
+            approved: true,
             createdAt: new Date(Date.now() - 3600000 * 24 * 15).toISOString(), // 15 days ago
             joinedAt: new Date(Date.now() - 3600000 * 24 * 15).toISOString()
           },
@@ -429,6 +458,19 @@ export const DataAPI = {
             displayName: 'Carlos Alumno',
             role: 'alumno',
             mensualidadActive: false,
+            subscription: false,
+            approved: true,
+            createdAt: new Date().toISOString(),
+            joinedAt: new Date().toISOString()
+          },
+          {
+            uid: 'norole-seed-1',
+            email: 'nuevo@titan.com',
+            displayName: 'Nuevo Postulante',
+            role: null,
+            mensualidadActive: false,
+            subscription: false,
+            approved: false,
             createdAt: new Date().toISOString(),
             joinedAt: new Date().toISOString()
           }
@@ -448,13 +490,15 @@ export const DataAPI = {
     if (isFirebaseConfigured && auth && db) {
       try {
         const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        const isDefaultAdmin = email === 'm.scalpernq@gmail.com';
+        const isDefaultAdmin = email.toLowerCase() === 'm.scalpernq@gmail.com';
         const newProfile: UserProfile = {
           uid: cred.user.uid,
           email: email,
           displayName: displayName || email.split('@')[0],
-          role: isDefaultAdmin ? 'administrador' : 'alumno',
+          role: isDefaultAdmin ? 'administrador' : null,
           mensualidadActive: isDefaultAdmin ? true : false,
+          subscription: isDefaultAdmin ? true : false,
+          approved: isDefaultAdmin ? true : false,
           createdAt: new Date().toISOString(),
           joinedAt: new Date().toISOString()
         };
@@ -475,8 +519,10 @@ export const DataAPI = {
         uid: 'user_' + Math.random().toString(36).substr(2, 9),
         email,
         displayName,
-        role: isDefaultAdmin ? 'administrador' : 'alumno',
+        role: isDefaultAdmin ? 'administrador' : null,
         mensualidadActive: isDefaultAdmin ? true : false,
+        subscription: isDefaultAdmin ? true : false,
+        approved: isDefaultAdmin ? true : false,
         createdAt: new Date().toISOString(),
         joinedAt: new Date().toISOString()
       };
@@ -494,16 +540,23 @@ export const DataAPI = {
         const cred = await signInWithEmailAndPassword(auth, email, pass);
         const snap = await getDoc(doc(db, 'users', cred.user.uid));
         if (snap.exists()) {
-          return snap.data() as UserProfile;
+          const uData = snap.data();
+          return {
+            ...uData,
+            subscription: uData.subscription !== undefined ? uData.subscription : !!uData.mensualidadActive,
+            approved: uData.approved !== undefined ? uData.approved : false,
+          } as UserProfile;
         } else {
           // If profile missing
-          const isDefaultAdmin = email === 'm.scalpernq@gmail.com';
+          const isDefaultAdmin = email.toLowerCase() === 'm.scalpernq@gmail.com';
           const newProfile: UserProfile = {
             uid: cred.user.uid,
             email: email,
             displayName: email.split('@')[0],
-            role: isDefaultAdmin ? 'administrador' : 'alumno',
+            role: isDefaultAdmin ? 'administrador' : null,
             mensualidadActive: isDefaultAdmin ? true : false,
+            subscription: isDefaultAdmin ? true : false,
+            approved: isDefaultAdmin ? true : false,
             createdAt: new Date().toISOString(),
             joinedAt: new Date().toISOString()
           };
@@ -521,7 +574,8 @@ export const DataAPI = {
       if (!user) {
         throw new Error("Correo o contraseña incorrectos.");
       }
-      // Demo mode: accept any password for local testing
+      user.subscription = user.subscription !== undefined ? user.subscription : !!user.mensualidadActive;
+      user.approved = user.approved !== undefined ? user.approved : false;
       localStorage.setItem('titan_logged_uid', user.uid);
       window.dispatchEvent(new Event('storage'));
       return user;
@@ -536,15 +590,22 @@ export const DataAPI = {
         const email = cred.user.email || '';
         const snap = await getDoc(doc(db, 'users', cred.user.uid));
         if (snap.exists()) {
-          return snap.data() as UserProfile;
+          const uData = snap.data();
+          return {
+            ...uData,
+            subscription: uData.subscription !== undefined ? uData.subscription : !!uData.mensualidadActive,
+            approved: uData.approved !== undefined ? uData.approved : false,
+          } as UserProfile;
         } else {
-          const isDefaultAdmin = email === 'm.scalpernq@gmail.com';
+          const isDefaultAdmin = email.toLowerCase() === 'm.scalpernq@gmail.com';
           const newProfile: UserProfile = {
             uid: cred.user.uid,
             email,
             displayName: cred.user.displayName || email.split('@')[0] || 'User',
-            role: isDefaultAdmin ? 'administrador' : 'alumno',
+            role: isDefaultAdmin ? 'administrador' : null,
             mensualidadActive: isDefaultAdmin ? true : false,
+            subscription: isDefaultAdmin ? true : false,
+            approved: isDefaultAdmin ? true : false,
             createdAt: new Date().toISOString(),
             joinedAt: new Date().toISOString()
           };
@@ -567,6 +628,8 @@ export const DataAPI = {
           displayName: 'Santi Google Admin',
           role: 'administrador',
           mensualidadActive: true,
+          subscription: true,
+          approved: true,
           createdAt: new Date().toISOString(),
           joinedAt: new Date().toISOString()
         };

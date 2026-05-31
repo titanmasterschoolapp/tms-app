@@ -9,8 +9,10 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
-  role: UserRole;
+  role: UserRole | null;
   mensualidadActive: boolean;
+  subscription: boolean;
+  approved: boolean;
   avatarUrl?: string;
   manualUnlocks?: string[]; // IDs of historical strategies manually unlocked
   createdAt: string;

@@ -368,6 +368,8 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
             email: '',
             role: targetMsg.userRole,
             mensualidadActive: true,
+            subscription: true,
+            approved: true,
             avatarUrl: targetMsg.avatarUrl,
             createdAt: targetMsg.createdAt,
             joinedAt: targetMsg.createdAt

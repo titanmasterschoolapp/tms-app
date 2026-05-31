@@ -129,9 +129,27 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
   const handleToggleMensualidad = async (userId: string) => {
     const userToEdit = usersList.find(u => u.uid === userId);
     if (!userToEdit) return;
-    const updated = { ...userToEdit, mensualidadActive: !userToEdit.mensualidadActive };
+    const nextVal = !userToEdit.mensualidadActive;
+    const updated = { 
+      ...userToEdit, 
+      mensualidadActive: nextVal,
+      subscription: nextVal 
+    };
     await DataAPI.updateUserProfile(updated);
-    triggerToast(`Acceso mensual de ${userToEdit.displayName} ${updated.mensualidadActive ? 'Habilitado' : 'Deshabilitado'}`);
+    triggerToast(`Acceso mensual de ${userToEdit.displayName} ${nextVal ? 'Habilitado' : 'Deshabilitado'}`);
+    loadAllData();
+  };
+
+  const handleToggleApproved = async (userId: string) => {
+    const userToEdit = usersList.find(u => u.uid === userId);
+    if (!userToEdit) return;
+    const nextVal = !userToEdit.approved;
+    const updated = { 
+      ...userToEdit, 
+      approved: nextVal 
+    };
+    await DataAPI.updateUserProfile(updated);
+    triggerToast(`Estado de aprobación de ${userToEdit.displayName} cambiado a ${nextVal ? 'APROBADO' : 'PENDIENTE'}`);
     loadAllData();
   };
 
@@ -530,7 +548,9 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                   <th className="py-3 px-2">Nombre Editable</th>
                   <th className="py-3 px-2">Correo</th>
                   <th className="py-3 px-2">Privilegios (Rol)</th>
+                  <th className="py-3 px-2">Aprobado</th>
                   <th className="py-3 px-2">Suscripción (Mensual)</th>
+                  <th className="py-3 px-2">Fecha Reg.</th>
                   <th className="py-3 px-1">Desbloqueos Manuales (Bypass de meses)</th>
                   <th className="py-3 px-2 text-right">Fuerza Bruta</th>
                 </tr>
@@ -543,7 +563,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                   )
                   .length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-zinc-550 italic">Ningún alumno coincide con los filtros establecidos.</td>
+                    <td colSpan={9} className="py-8 text-center text-zinc-550 italic">Ningún alumno coincide con los filtros establecidos.</td>
                   </tr>
                 ) : (
                   usersList
@@ -585,7 +605,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                               )}
                               <div>
                                 <div className="font-semibold text-white truncate max-w-[120px]">{user.displayName}</div>
-                                <span className="text-[8px] text-zinc-500 uppercase font-mono tracking-widest">{user.role}</span>
+                                <span className="text-[8px] text-zinc-500 uppercase font-mono tracking-widest">{user.role || 'SIN ROL'}</span>
                               </div>
                             </div>
                           </td>
@@ -608,17 +628,44 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                           <td className="py-3 px-2">
                             <select
                               id={`user-role-select-${user.uid}`}
-                              value={user.role}
+                              value={user.role === null ? "" : user.role}
                               disabled={isCurrentUserRow}
-                              onChange={(e) => handleRoleChange(user.uid, e.target.value as UserRole)}
+                              onChange={(e) => handleRoleChange(user.uid, (e.target.value === "" ? null : e.target.value) as any)}
                               className="bg-zinc-950 border border-zinc-850 rounded-lg p-1.5 text-xs text-zinc-305 outline-none focus:border-violet-500 font-mono"
                             >
+                              <option value="">Sin Rol (Pendiente)</option>
                               <option value="alumno">Alumno (Libre)</option>
                               <option value="miembro">Miembro (VIP)</option>
                               <option value="moderador">Moderador (Chat)</option>
                               <option value="colaborador">Colaborador</option>
                               <option value="administrador">Administrador</option>
                             </select>
+                          </td>
+
+                          {/* Approval Switch */}
+                          <td className="py-3 px-2">
+                            <button
+                              id={`toggle-approved-btn-${user.uid}`}
+                              onClick={() => handleToggleApproved(user.uid)}
+                              disabled={isCurrentUserRow}
+                              className={`flex items-center gap-1.5 py-1 px-2 rounded-lg text-[9px] font-bold tracking-wide font-mono transition-all ${
+                                user.approved 
+                                ? 'bg-violet-500/10 border border-violet-500/20 text-[#a78bfa]' 
+                                : 'bg-rose-500/10 border border-rose-500/25 text-rose-400'
+                              }`}
+                            >
+                              {user.approved ? (
+                                <>
+                                  <ToggleRight className="w-4 h-4 text-[#a78bfa]" />
+                                  <span>APROBADO</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ToggleLeft className="w-4 h-4 text-rose-400" />
+                                  <span>PENDIENTE</span>
+                                </>
+                              )}
+                            </button>
                           </td>
 
                           {/* Subscription Status Toggle */}
@@ -629,7 +676,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                               disabled={isCurrentUserRow}
                               className={`flex items-center gap-1.5 py-1 px-2 rounded-lg text-[9px] font-bold tracking-wide font-mono transition-all ${
                                 user.mensualidadActive 
-                                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.05)]' 
+                                ? 'bg-emerald-500/10 border border-[#10b981]/20 text-emerald-400' 
                                 : 'bg-zinc-950 border border-zinc-850 text-zinc-500'
                               }`}
                             >
@@ -645,6 +692,11 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                                 </>
                               )}
                             </button>
+                          </td>
+
+                          {/* Registration Date */}
+                          <td className="py-3 px-2 text-zinc-400 font-mono text-[10px] whitespace-nowrap">
+                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/D'}
                           </td>
 
                           {/* Optional Bypass strategy locking manually */}

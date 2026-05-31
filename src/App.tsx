@@ -226,17 +226,17 @@ export default function App() {
     }
   };
 
-  // Simulation controls
+  // Simulation controls (Strictly Admin only)
   const handleSimulatedRoleChange = async (role: UserRole) => {
-    if (!user) return;
+    if (!user || user.role !== 'administrador') return;
     const updated = { ...user, role };
     setUser(updated);
     await DataAPI.updateUserProfile(updated);
   };
 
   const handleSimulatedSubscriptionToggle = async (active: boolean) => {
-    if (!user) return;
-    const updated = { ...user, mensualidadActive: active };
+    if (!user || user.role !== 'administrador') return;
+    const updated = { ...user, mensualidadActive: active, subscription: active };
     setUser(updated);
     await DataAPI.updateUserProfile(updated);
   };
@@ -265,7 +265,7 @@ export default function App() {
   const alumnoMeetings = meetings.filter(m => m.type === 'alumno');
   const comunidadMeetings = meetings.filter(m => m.type === 'mensualidad');
 
-  const hasPayingAccess = user?.mensualidadActive || ['colaborador', 'administrador'].includes(user?.role || '');
+  const hasPayingAccess = ['administrador', 'colaborador'].includes(user?.role || '') || (['miembro', 'moderador'].includes(user?.role || '') && !!(user?.subscription || user?.mensualidadActive));
 
   if (loading) {
     return (
@@ -621,7 +621,7 @@ export default function App() {
                   <p className="text-xs font-bold text-slate-200 truncate max-w-[90px] font-sans flex items-center gap-1">
                     {user.displayName}
                   </p>
-                  <p className="text-[8px] text-pink-400 font-mono tracking-widest uppercase font-black">{user.role}</p>
+                  <p className="text-[8px] text-pink-400 font-mono tracking-widest uppercase font-black">{user.role || 'Sin Rol'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-0.5">
@@ -650,111 +650,126 @@ export default function App() {
         {/* DOUBLE VIEWPORT MAIN CONTAINER */}
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* LEFT SIDE NAVIGATION PANEL (3cols) */}
-          {activeView === 'pupil_panel' && (
+                 {activeView === 'pupil_panel' && (
             <aside className="lg:col-span-3 space-y-6">
             
-            {/* SECCIÓN A: ALUMNO NAV */}
-            <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
-              <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between ">
-                <span className="text-[10px] text-slate-500 font-mono font-bold tracking-widest uppercase">Sección Alumno</span>
-                <span className="text-[9px] bg-purple-500/10 border border-purple-500/25 text-purple-400 py-0.5 px-1.5 rounded uppercase font-mono font-bold">Abierto</span>
+              {/* SECCIÓN A: ALUMNO NAV */}
+              <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
+                <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between ">
+                  <span className="text-[10px] text-slate-500 font-mono font-bold tracking-widest uppercase">Sección Alumno</span>
+                  <span className="text-[9px] bg-purple-500/10 border border-purple-500/25 text-purple-400 py-0.5 px-1.5 rounded uppercase font-mono font-bold">Abierto</span>
+                </div>
+
+                <nav className="space-y-1 pt-2">
+                  {[
+                    { view: 'pupil_panel', label: 'Panel principal', icon: BookOpen },
+                    { view: 'pupil_chat', label: 'Chat general', icon: MessageSquare, isChat: true },
+                    { view: 'pupil_resources', label: 'Recursos', icon: BookMarked },
+                    { view: 'pupil_tools', label: 'Herramientas', icon: Wrench },
+                    { view: 'pupil_discounts', label: 'Descuentos y cupones', icon: Tag },
+                    { view: 'pupil_meetings', label: 'Sesiones Zoom/Meet', icon: Video, isMeeting: true },
+                    { view: 'pupil_notices', label: 'Avisos', icon: Info }
+                  ].filter(item => {
+                    // Sin rol can only access Herramientas and Descuentos
+                    if (user?.role === null) {
+                      return ['pupil_tools', 'pupil_discounts'].includes(item.view);
+                    }
+                    // Alumno has no access to Chats or Reuniones (Meetings)
+                    if (user?.role === 'alumno') {
+                      if (item.isChat || item.isMeeting) return false;
+                    }
+                    // If subscription is false, hide Chats, Reuniones
+                    const isSubActive = !!(user?.subscription || user?.mensualidadActive);
+                    if (!isSubActive) {
+                      if (item.isChat || item.isMeeting) return false;
+                    }
+                    return true;
+                  }).map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        id={`nav-${item.view}`}
+                        key={item.view}
+                        onClick={() => setActiveView(item.view)}
+                        className={`w-full text-left py-2 px-3 rounded-xl text-xs font-semibold tracking-wide flex items-center justify-between transition-all cursor-pointer ${
+                          activeView === item.view 
+                          ? 'bg-white/5 text-white border border-white/5 shadow-md shadow-purple-500/5' 
+                          : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <Icon className="w-4 h-4 text-purple-400" />
+                          {item.label}
+                        </span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                      </button>
+                    );
+                  })}
+                </nav>
               </div>
 
-              <nav className="space-y-1 pt-2">
-                {[
-                  { view: 'pupil_panel', label: 'Panel principal', icon: BookOpen },
-                  { view: 'pupil_chat', label: 'Chat general', icon: MessageSquare },
-                  { view: 'pupil_resources', label: 'Recursos', icon: BookMarked },
-                  { view: 'pupil_tools', label: 'Herramientas', icon: Wrench },
-                  { view: 'pupil_discounts', label: 'Descuentos y cupones', icon: Tag },
-                  { view: 'pupil_meetings', label: 'Sesiones Zoom/Meet', icon: Video },
-                  { view: 'pupil_notices', label: 'Avisos', icon: Info }
-                ].map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      id={`nav-${item.view}`}
-                      key={item.view}
-                      onClick={() => setActiveView(item.view)}
-                      className={`w-full text-left py-2 px-3 rounded-xl text-xs font-semibold tracking-wide flex items-center justify-between transition-all cursor-pointer ${
-                        activeView === item.view 
-                        ? 'bg-white/5 text-white border border-white/5 shadow-md shadow-purple-500/5' 
-                        : 'text-slate-400 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <Icon className="w-4 h-4 text-purple-400" />
-                        {item.label}
-                      </span>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
-
-                       {/* SECCIÓN B: COMUNIDAD/MENSUALIDAD NAV */}
-             <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
-               <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between">
-                 <span className="text-[10px] text-slate-550 font-mono font-bold tracking-widest uppercase">COMUNIDAD</span>
-                 <span className={`text-[9px] py-0.5 px-1.5 rounded uppercase font-mono font-bold ${
-                   hasPayingAccess 
-                   ? 'bg-pink-500/10 border border-pink-500/25 text-pink-400' 
-                   : 'bg-[#121214] border border-white/5 text-slate-400 animate-pulse'
-                 }`}>
-                   {hasPayingAccess ? 'VIP' : 'Bloqueado'}
-                 </span>
-               </div>
- 
-               <nav className="space-y-1 pt-2">
-                 {hasPayingAccess ? (
-                   [
-                     { view: 'community_chat', label: 'Chat comunidad', icon: MessageSquare },
-                     { view: 'community_meetings', label: 'Sesiones comunidad', icon: Video },
-                     { view: 'community_hof', label: 'Salón de la fama', icon: Award },
-                     { view: 'community_featured', label: 'Estrategias destacadas', icon: Flame },
-                     { view: 'community_library', label: 'Históricas ganadoras', icon: Layers }
-                   ].map((item) => {
-                     const Icon = item.icon;
-                     return (
-                       <button
-                         id={`nav-${item.view}`}
-                         key={item.view}
-                         onClick={() => setActiveView(item.view)}
-                         className={`w-full text-left py-2 px-3 rounded-xl text-xs font-semibold tracking-wide flex items-center justify-between transition-all cursor-pointer ${
-                           activeView === item.view 
-                           ? 'bg-white/5 text-white border border-white/5 shadow-md shadow-pink-500/5' 
-                           : 'text-slate-400 hover:text-white hover:bg-white/5'
-                         }`}
-                       >
-                         <span className="flex items-center gap-2.5">
-                           <Icon className="w-4 h-4 text-pink-400" />
-                           {item.label}
-                         </span>
-                         <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
-                       </button>
-                     );
-                   })
-                 ) : (
-                   <button
-                     id="nav-join-community-private"
-                     onClick={() => setActiveView('community_checkout')}
-                     className="w-full text-left py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-between transition-all cursor-pointer border border-[#f43f5e]/15 bg-[#f43f5e]/5 text-pink-400 hover:bg-[#f43f5e]/10 shadow-md shadow-pink-500/5"
-                   >
-                     <span className="flex items-center gap-2.5">
-                       <Sparkles className="w-4 h-4 text-pink-400 animate-pulse" />
-                       <span>Únete a la Comunidad Privada</span>
-                     </span>
-                     <ArrowUpRight className="w-4 h-4 text-pink-400" />
-                   </button>
-                 )}
-
-              </nav>
-            </div>
+              {/* SECCIÓN B: COMUNIDAD/MENSUALIDAD NAV */}
+              {user?.role !== null && (
+                <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
+                  <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-550 font-mono font-bold tracking-widest uppercase">COMUNIDAD</span>
+                    <span className={`text-[9px] py-0.5 px-1.5 rounded uppercase font-mono font-bold ${
+                      hasPayingAccess 
+                      ? 'bg-pink-500/10 border border-pink-500/25 text-pink-400' 
+                      : 'bg-[#121214] border border-white/5 text-slate-400'
+                    }`}>
+                      {hasPayingAccess ? 'VIP' : 'Bloqueado'}
+                    </span>
+                  </div>
+    
+                  <nav className="space-y-1 pt-2">
+                    {hasPayingAccess ? (
+                      [
+                        { view: 'community_chat', label: 'Chat comunidad', icon: MessageSquare },
+                        { view: 'community_meetings', label: 'Sesiones comunidad', icon: Video },
+                        { view: 'community_hof', label: 'Salón de la fama', icon: Award },
+                        { view: 'community_featured', label: 'Estrategias destacadas', icon: Flame },
+                        { view: 'community_library', label: 'Históricas ganadoras', icon: Layers }
+                      ].map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <button
+                            id={`nav-${item.view}`}
+                            key={item.view}
+                            onClick={() => setActiveView(item.view)}
+                            className={`w-full text-left py-2 px-3 rounded-xl text-xs font-semibold tracking-wide flex items-center justify-between transition-all cursor-pointer ${
+                              activeView === item.view 
+                              ? 'bg-white/5 text-white border border-white/5 shadow-md shadow-pink-500/5' 
+                              : 'text-slate-400 hover:text-white hover:bg-white/5'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2.5">
+                              <Icon className="w-4 h-4 text-pink-400" />
+                              {item.label}
+                            </span>
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <button
+                        id="nav-join-community-private"
+                        onClick={() => setActiveView('community_checkout')}
+                        className="w-full text-left py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-between transition-all cursor-pointer border border-[#f43f5e]/15 bg-[#f43f5e]/5 text-pink-400 hover:bg-[#f43f5e]/10 shadow-md shadow-pink-500/5"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <Sparkles className="w-4 h-4 text-pink-400 animate-pulse" />
+                          <span>Únete a la Comunidad Privada</span>
+                        </span>
+                        <ArrowUpRight className="w-4 h-4 text-pink-400" />
+                      </button>
+                    )}
+                  </nav>
+                </div>
+              )}
 
             {/* SECCIÓN ADMINISTRADOR O COLABORADOR ACCESO */}
-            {['administrador', 'colaborador'].includes(user.role) && (
+            {['administrador', 'colaborador'].includes(user.role || '') && (
               <div className="bg-[#0a0505] border border-red-500/10 p-4 rounded-2xl">
                 <button
                   id="nav-admin-direct-link"
@@ -802,7 +817,43 @@ export default function App() {
           <main className="lg:col-span-9 space-y-8">
             
             {/* VIEW A.1: PANEL PRINCIPAL / DASHBOARD */}
-            {activeView === 'pupil_panel' && (
+            {activeView === 'pupil_panel' && user?.role === null && (
+              <div id="sin-rol-dashboard" className="p-8 bg-[#0A0A0B] border border-white/5 rounded-3xl relative overflow-hidden text-center space-y-6">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-purple-500/5 rounded-full blur-3xl" />
+                
+                <div className="space-y-3 max-w-lg mx-auto">
+                  <div className="inline-flex p-3 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-2xl animate-pulse mb-2">
+                    <ShieldAlert className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold font-heading text-white tracking-tight">Disponible para alumnos de Titan Master School.</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                    Tu usuario aún no ha sido aprobado o asignado a un grupo académico. Puedes acceder únicamente a las calculadoras de trading y a los cupones de descuento mientras un Director Académico aprueba tu cuenta.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+                  <button
+                    id="sin-rol-goto-tools"
+                    onClick={() => setActiveView('pupil_tools')}
+                    className="w-full sm:w-auto py-2.5 px-5 bg-purple-600 hover:bg-purple-550 text-white font-bold rounded-xl text-xs transition-colors shadow-lg cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Wrench className="w-4 h-4" />
+                    <span>Ver Herramientas Habilitadas</span>
+                  </button>
+                  
+                  <button
+                    id="sin-rol-goto-discounts"
+                    onClick={() => setActiveView('pupil_discounts')}
+                    className="w-full sm:w-auto py-2.5 px-5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Tag className="w-4 h-4" />
+                    <span>Ver Convenios y Cupones</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeView === 'pupil_panel' && user?.role !== null && (
               <div id="pupil-dashboard-view" className="space-y-6">
                 
                 {/* School Greeting card */}
@@ -812,7 +863,7 @@ export default function App() {
                   <div className="space-y-2 relative z-10">
                     <span className="text-[9px] text-purple-400 font-mono font-bold uppercase tracking-widest block">BIENVENIDO DE VUELTA</span>
                     <h2 className="text-2xl font-bold font-heading text-white tracking-tight">A Titan Master School, {user.displayName}</h2>
-                    <p className="text-slate-350 text-xs leading-relaxed max-w-xl">Tienes estatus académico de <strong>{user.role.toUpperCase()}</strong>. Este portal te permite consultar transmisiones, debatir en los canales comunitarios del chat general y descargar materiales de alto rendimiento.</p>
+                    <p className="text-slate-350 text-xs leading-relaxed max-w-xl">Tienes estatus académico de <strong>{(user.role || 'sin rol').toUpperCase()}</strong>. Este portal te permite consultar transmisiones, debatir en los canales comunitarios del chat general y descargar materiales de alto rendimiento.</p>
                   </div>
                 </div>
 
@@ -1697,7 +1748,7 @@ export default function App() {
             )}
 
             {/* VIEW C.1: CENTRO DE ADMINISTRACIÓN */}
-            {activeView === 'admin_view' && ['administrador', 'colaborador'].includes(user.role) && (
+            {activeView === 'admin_view' && ['administrador', 'colaborador'].includes(user.role || '') && (
               <AdminPanel currentUser={user} />
             )}
 
@@ -1708,12 +1759,14 @@ export default function App() {
 
       {/* FLOATING SIMULATOR BAR FOOTER FOR SIMPLE TESTING */}
       <footer className="w-full max-w-7xl mx-auto px-4 md:px-6 pb-12">
-        <ControlPanel 
-          currentUser={user} 
-          onChangeUserRole={handleSimulatedRoleChange}
-          onChangeMensualidad={handleSimulatedSubscriptionToggle}
-          isFirebase={isFirebaseConfigured}
-        />
+        {user?.role === 'administrador' && (
+          <ControlPanel 
+            currentUser={user} 
+            onChangeUserRole={handleSimulatedRoleChange}
+            onChangeMensualidad={handleSimulatedSubscriptionToggle}
+            isFirebase={isFirebaseConfigured}
+          />
+        )}
         <div className="text-center mt-6 text-[11px] text-slate-650 font-mono">
           © 2026 Titan Master School. Todos los derechos reservados.
         </div>

@@ -27,7 +27,7 @@ if (isFirebaseConfigured) {
       app = getApp();
     }
     // Bind database ID if provided
-    db = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+    db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || undefined);
     auth = getAuth(app);
   } catch (error) {
     console.error("Firebase initialization failed dynamically", error);

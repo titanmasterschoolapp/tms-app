@@ -34,7 +34,8 @@ import {
   BookMarked,
   Download,
   Shield,
-  Copy
+  Copy,
+  Pin
 } from 'lucide-react';
 
 import { 
@@ -61,6 +62,23 @@ import ChatPanel from './components/ChatPanel';
 import AdminPanel from './components/AdminPanel';
 import RecursosBoard from './components/RecursosBoard';
 import HerramientasBoard from './components/HerramientasBoard';
+
+export const getUserSeniority = (userProfile: any): number => {
+  if (!userProfile) return 0;
+  if (userProfile.manualForceUnlock) return 999; // bypass all locks
+  if (userProfile.blockUnlocks) return 0; // standard lock seniority
+  if (userProfile.manualSeniorityMonths !== undefined && userProfile.manualSeniorityMonths !== null) {
+    return Number(userProfile.manualSeniorityMonths);
+  }
+  const dateStr = userProfile.memberJoinedAt || userProfile.joinedAt;
+  if (!dateStr) return 0;
+  const start = new Date(dateStr);
+  const end = new Date();
+  const years = end.getFullYear() - start.getFullYear();
+  const months = end.getMonth() - start.getMonth();
+  const total = years * 12 + months;
+  return total < 0 ? 0 : total;
+};
 
 export default function App() {
   // Authentication states
@@ -114,6 +132,7 @@ export default function App() {
       setLoading(false);
       // If user logs in we set active view to default panel
       if (profile) {
+        setSimulatedMonths(getUserSeniority(profile));
         if (profile.role === 'administrador') {
           setActiveView('admin_view');
         } else {
@@ -659,7 +678,13 @@ export default function App() {
               <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
                 <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between ">
                   <span className="text-[10px] text-slate-500 font-mono font-bold tracking-widest uppercase">Sección Alumno</span>
-                  <span className="text-[9px] bg-purple-500/10 border border-purple-500/25 text-purple-400 py-0.5 px-1.5 rounded uppercase font-mono font-bold">Abierto</span>
+                  <span className={`text-[9px] py-0.5 px-1.5 rounded uppercase font-mono font-bold ${
+                    isSinRol 
+                    ? 'bg-[#121214] border border-white/5 text-slate-400' 
+                    : 'bg-purple-500/10 border border-purple-500/25 text-purple-400'
+                  }`}>
+                    {isSinRol ? 'Bloqueado' : 'Abierto'}
+                  </span>
                 </div>
 
                 <nav className="space-y-1 pt-2">
@@ -707,6 +732,20 @@ export default function App() {
                       </button>
                     );
                   })}
+
+                  {isSinRol && (
+                    <button
+                      id="nav-join-tms"
+                      onClick={() => setActiveView('pupil_checkout')}
+                      className="w-full text-left py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-between transition-all cursor-pointer border border-[#f43f5e]/15 bg-[#f43f5e]/5 text-pink-405 hover:bg-[#f43f5e]/10 shadow-md shadow-pink-500/5 mt-1"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Sparkles className="w-4 h-4 text-pink-400 animate-pulse" />
+                        <span>Únete a TMS</span>
+                      </span>
+                      <ArrowUpRight className="w-4 h-4 text-pink-400" />
+                    </button>
+                  )}
                 </nav>
               </div>
 
@@ -815,8 +854,8 @@ export default function App() {
           </aside>
         )}
 
-          {/* RIGHT SIDE WORKSPACE VIEWPORT (9cols) */}
-          <main className="lg:col-span-9 space-y-8">
+          {/* RIGHT SIDE WORKSPACE VIEWPORT (9/12cols) */}
+          <main className={`${activeView === 'pupil_panel' ? 'lg:col-span-9' : 'lg:col-span-12'} space-y-8`}>
             
             {/* VIEW A.1: PANEL PRINCIPAL / DASHBOARD */}
             {activeView === 'pupil_panel' && isSinRol && (
@@ -1021,7 +1060,6 @@ export default function App() {
                 <HerramientasBoard 
                   currentUser={user} 
                   toolTopics={toolTopics} 
-                  toolsList={tools} 
                   onRefresh={loadGlobalCollections} 
                 />
               </div>
@@ -1515,6 +1553,56 @@ export default function App() {
               </div>
             )}
 
+            {/* VIEW A.0: PUPIL CHECKOUT WALL (ÚNETE A TMS) */}
+            {activeView === 'pupil_checkout' && (
+              <div id="pupil-payment-wall" className="p-8 bg-[#0A0A0B] border border-white/5 rounded-3xl relative overflow-hidden text-center space-y-6 animate-fade-in">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-pink-500/5 rounded-full blur-3xl" />
+                
+                <div className="space-y-2 max-w-lg mx-auto">
+                  <div className="inline-flex p-3 bg-pink-500/10 border border-pink-500/30 text-pink-400 rounded-2xl animate-pulse mb-2">
+                    <Lock className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold font-heading text-white tracking-tight">Acceso Bloqueado: Sección Alumno</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed font-sans mt-2">
+                    Actualmente no tienes un rol académico activo en Titan Master School. Únete hoy mismo para desbloquear los canales del chat escolar, biblioteca de recursos, circulares de avisos y sesiones en vivo.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto text-xs text-left font-sans">
+                  {[
+                    { title: 'Chat Escolar Colectivo', desc: 'Debates grupales técnicos y análisis junto a tus compañeros de clase.', icon: MessageSquare },
+                    { title: 'Videoteca & Recursos', desc: 'Colección de guías, plantillas de alta precisión y descargas autorizadas.', icon: BookMarked },
+                    { title: 'Canales de Descuentos', desc: 'Códigos exclusivos y convenios preferenciales con firmas de fondeo.', icon: Tag }
+                  ].map((p, idx) => {
+                    const Icon = p.icon;
+                    return (
+                      <div id={`pupil-benefit-card-${idx}`} key={idx} className="p-4 bg-[#050505] border border-white/5 rounded-2xl space-y-1">
+                        <Icon className="w-5 h-5 text-pink-400 mb-1" />
+                        <span className="font-bold text-white block">{p.title}</span>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">{p.desc}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+                  <a
+                    id="tms-join-link-btn"
+                    href="https://hotmart.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full sm:w-auto py-3 px-6 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-bold rounded-2xl text-xs transition-all shadow-lg cursor-pointer font-sans select-none"
+                  >
+                    ÚNETE A TMS ↗
+                  </a>
+                  
+                  <div className="text-[10px] text-slate-500 px-3 py-1 bg-[#050505] rounded border border-white/5 font-sans">
+                    💡 EVALUACIÓN: Aprueba la cuenta o asigna el rol "Alumno" en el panel de Staff para desbloquearla.
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* VIEW B.0: UNLOCKED HOTMART PAYMENT WALL */}
             {activeView === 'community_checkout' && (
               <div id="community-payment-wall" className="p-8 bg-[#0A0A0B] border border-white/5 rounded-3xl relative overflow-hidden text-center space-y-6">
@@ -1662,48 +1750,89 @@ export default function App() {
               <div id="community-featured-view" className="space-y-6">
                 <div>
                   <h3 className="text-lg font-sans font-bold text-white">Estrategias Destacadas Académicas</h3>
-                  <p className="text-xs text-slate-500 mt-1 uppercase font-mono">PLANOS DOCENTES RECOMENDADOS POR EL PROFESORADO</p>
                 </div>
 
                 <div className="space-y-6 text-xs font-sans">
                   {featuredStrategies.length === 0 ? (
                     <div className="p-10 bg-[#0A0A0B] border border-white/5 text-center rounded-2xl text-slate-500 font-sans">Todavía no se ha destacado ninguna estrategia esta semana.</div>
                   ) : (
-                    featuredStrategies.map((sf) => (
-                      <div id={`sf-card-${sf.id}`} key={sf.id} className="p-6 bg-gradient-to-br from-[#0A0A0B] to-[#050505] border border-white/5 rounded-3xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-white/5 pb-3 flex-wrap gap-2">
-                          <div>
-                            <span className="text-pink-400 text-[10px] font-mono font-bold uppercase block tracking-wider">MÉTODO DESTACADO</span>
-                            <h4 className="text-lg font-bold text-white block mt-0.5 font-sans">{sf.name}</h4>
-                          </div>
-                          <div className="text-right font-mono text-[10px] text-slate-500">
-                            <span>Autor: {sf.author || 'Mesa Académica'}</span>
-                            <span className="block">Fecha: {sf.date}</span>
-                          </div>
-                        </div>
+                    [...featuredStrategies]
+                      .sort((a, b) => {
+                        // Pin first
+                        if (a.pinned && !b.pinned) return -1;
+                        if (!a.pinned && b.pinned) return 1;
+                        // Order Index
+                        const oA = a.orderIndex !== undefined ? a.orderIndex : 999;
+                        const oB = b.orderIndex !== undefined ? b.orderIndex : 999;
+                        if (oA !== oB) return oA - oB;
+                        // Newest first
+                        return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
+                      })
+                      .map((sf) => {
+                        const userMonths = getUserSeniority(user);
+                        const meetsSeniority = userMonths >= (sf.requiredMonths || 0);
+                        const isBypassed = !!(user?.manualForceUnlock || (user?.manualUnlocks || []).includes(sf.id));
+                        const isLocked = !meetsSeniority && !isBypassed;
 
-                        <p className="text-slate-350 text-xs leading-relaxed">{sf.description}</p>
+                        return (
+                          <div
+                            id={`sf-card-${sf.id}`}
+                            key={sf.id}
+                            className={`p-6 bg-gradient-to-br from-[#0A0A0B] to-[#050505] border border-white/5 rounded-3xl space-y-4 relative overflow-hidden transition-all duration-300 ${isLocked ? 'border-red-500/10' : 'hover:border-white/10'}`}
+                          >
+                            {isLocked && (
+                              <div className="absolute inset-0 bg-[#000]/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center p-6 space-y-3">
+                                <Lock className="w-8 h-8 text-pink-500 animate-pulse" />
+                                <span className="font-extrabold text-white font-sans text-sm tracking-wide uppercase">Contenido Cerrado por Antigüedad</span>
+                                <p className="text-[11px] text-slate-400 max-w-sm font-sans leading-relaxed">
+                                  Esta estrategia requiere un mínimo de <strong className="text-pink-400 font-mono">{sf.requiredMonths} {sf.requiredMonths === 1 ? 'Mes' : 'Meses'}</strong> de membresía constante en la academia para ser desbloqueada.
+                                </p>
+                                <div className="text-[9px] bg-[#0A0A0B] border border-white/5 text-slate-500 py-1 px-2.5 rounded font-mono uppercase">
+                                  Tu antigüedad actual: {userMonths} {userMonths === 1 ? 'Mes' : 'Meses'}
+                                </div>
+                              </div>
+                            )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                          <div className="p-3 bg-[#050505] border border-white/5 rounded-xl">
-                            <span className="text-pink-400 font-bold block mb-1 uppercase text-[10px]">Parámetros Clave:</span>
-                            <span className="text-slate-400 text-[11px] font-medium leading-relaxed">{sf.parameters}</span>
-                          </div>
-                          {sf.comments && (
-                            <div className="p-3 bg-[#050505] border border-white/5 rounded-xl">
-                              <span className="text-purple-400 font-bold block mb-1 uppercase text-[10px]">Comentarios del Staff:</span>
-                              <span className="text-slate-400 text-[11px] leading-relaxed italic">"{sf.comments}"</span>
+                            <div className="flex items-center justify-between border-b border-white/5 pb-3 flex-wrap gap-2">
+                              <div>
+                                <span className="text-pink-400 text-[9px] font-mono font-bold uppercase flex items-center gap-1.5 tracking-wider">
+                                  {sf.pinned && <Pin className="w-3.5 h-3.5 text-pink-400 rotate-45" />}
+                                  MÉTODO DESTACADO
+                                  {sf.requiredMonths !== undefined && sf.requiredMonths > 0 && (
+                                    <span className="text-[8px] bg-pink-500/10 border border-pink-500/20 text-pink-400 px-1 py-0.5 rounded font-mono font-semibold uppercase">Exige {sf.requiredMonths} {sf.requiredMonths === 1 ? 'Mes' : 'Meses'}</span>
+                                  )}
+                                </span>
+                                <h4 className="text-lg font-bold text-white block mt-1 font-sans">{sf.name}</h4>
+                              </div>
+                              <div className="text-right font-mono text-[10px] text-slate-500">
+                                <span>Autor: {sf.author || 'Mesa Académica'}</span>
+                                {sf.date && <span className="block">Fecha: {sf.date}</span>}
+                              </div>
                             </div>
-                          )}
-                        </div>
 
-                        {/* Beautiful simulation trading wave chart */}
-                        <div className="h-32 bg-[#050505] border border-white/5 rounded-xl relative flex items-center justify-center font-mono text-[10px] text-slate-500 overflow-hidden">
-                          <div className="absolute inset-0 opacity-15 bg-gradient-to-r from-purple-600 via-pink-500 to-transparent" />
-                          <span className="relative z-10 font-sans">📊 Histograma de Ratio de Beneficio</span>
-                        </div>
-                      </div>
-                    ))
+                            <p className="text-slate-350 text-xs leading-relaxed">{sf.description}</p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                              <div className="p-3 bg-[#050505] border border-white/5 rounded-xl">
+                                <span className="text-pink-400 font-bold block mb-1 uppercase text-[10px]">Parámetros Clave:</span>
+                                <span className="text-slate-400 text-[11px] font-medium leading-relaxed">{sf.parameters}</span>
+                              </div>
+                              {sf.comments && (
+                                <div className="p-3 bg-[#050505] border border-white/5 rounded-xl">
+                                  <span className="text-purple-400 font-bold block mb-1 uppercase text-[10px]">Comentarios del Staff:</span>
+                                  <span className="text-slate-400 text-[11px] leading-relaxed italic">"{sf.comments}"</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Beautiful simulation trading wave chart */}
+                            <div className="h-32 bg-[#050505] border border-white/5 rounded-xl relative flex items-center justify-center font-mono text-[10px] text-slate-500 overflow-hidden">
+                              <div className="absolute inset-0 opacity-15 bg-gradient-to-r from-purple-600 via-pink-500 to-transparent" />
+                              <span className="relative z-10 font-sans">📊 Histograma de Ratio de Beneficio</span>
+                            </div>
+                          </div>
+                        );
+                      })
                   )}
                 </div>
               </div>

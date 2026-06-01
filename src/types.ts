@@ -17,6 +17,10 @@ export interface UserProfile {
   manualUnlocks?: string[]; // IDs of historical strategies manually unlocked
   createdAt: string;
   joinedAt: string; // Dynamic date to calculate seniority (1-2-3-6 months)
+  memberJoinedAt?: string; // Fecha inicio de membresía
+  manualSeniorityMonths?: number; // Antigüedad actual editada manualmente
+  blockUnlocks?: boolean; // Bloquear desbloqueos por antigüedad
+  manualForceUnlock?: boolean; // Desbloquear manualmente todo
 }
 
 export interface ChatReply {
@@ -73,7 +77,7 @@ export interface ResourceTopic {
   pinned?: boolean;
   orderIndex?: number;
   commentsAllowed?: boolean; // false means read-only
-  commentsTarget?: 'todos' | 'alumno' | 'staff'; // restrict writer roles
+  commentsTarget?: 'todos' | 'alumno' | 'staff' | 'ninguno'; // restrict writer roles
   isPrivate?: boolean; // resource is private (vs public)
   category?: string; // category classification name/id
 }
@@ -100,7 +104,7 @@ export interface ToolTopic {
   pinned?: boolean;
   orderIndex?: number;
   commentsAllowed?: boolean;
-  commentsTarget?: 'todos' | 'alumno' | 'staff';
+  commentsTarget?: 'todos' | 'alumno' | 'staff' | 'ninguno';
   isPrivate?: boolean;
   category?: string;
 }
@@ -146,6 +150,9 @@ export interface StrategyFeatured {
   author?: string;
   comments?: string;
   createdAt: string;
+  orderIndex?: number;
+  pinned?: boolean;
+  requiredMonths?: number; // 0, 1, 3, 6, 12 months seniority requirement
 }
 
 export interface StrategyHistorical {

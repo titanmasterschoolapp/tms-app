@@ -669,7 +669,7 @@ export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }
                     >
                       <option value="todos">Todos (Visibilidad global)</option>
                       <option value="alumno">Rol Alumno en adelante</option>
-                      <option value="miembro">Solo Miembros VIP Comunidad</option>
+                      <option value="miembro">Solo Miembros de la Comunidad</option>
                       <option value="staff">Solo Staff</option>
                     </select>
                   </div>

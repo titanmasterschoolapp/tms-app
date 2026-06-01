@@ -229,7 +229,7 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
   const commentsAllowed = activeTopic?.commentsAllowed !== false;
   const commentsTarget = activeTopic?.commentsTarget || 'todos';
   let canCommentActive = true;
-  if (!commentsAllowed) {
+  if (!commentsAllowed || commentsTarget === 'ninguno') {
     canCommentActive = false;
   } else if (commentsTarget === 'alumno') {
     canCommentActive = ['alumno', 'miembro', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role);
@@ -246,7 +246,6 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
           <div className="flex items-center justify-between pb-3 border-b border-white/5">
             <div>
               <h3 className="text-sm font-sans font-bold text-white uppercase tracking-wider">Recursos de Formación</h3>
-              <p className="text-[10px] text-zinc-550 font-mono">TEMAS INDEPENDIENTES DE TRADING</p>
             </div>
             
             {isStaff && (
@@ -600,9 +599,10 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
                           onChange={(e) => setFormCommentsTarget(e.target.value as any)}
                           className="w-full bg-zinc-950 border border-zinc-850 rounded-lg p-2 text-white font-mono text-[11px]"
                         >
-                          <option value="todos">Todos los rangos</option>
-                          <option value="alumno">Alumnos o superior</option>
-                          <option value="staff">Solo Equipo Staff</option>
+                          <option value="todos">Permitir comentarios (Abiertos / Público)</option>
+                          <option value="alumno">Solo Alumnos y Miembros (Excluye sin rol)</option>
+                          <option value="staff">Solo Staff / Equipo de Profesores</option>
+                          <option value="ninguno">Solo Lectura (Comentarios Desactivados)</option>
                         </select>
                       </div>
                     )}
@@ -644,7 +644,7 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
                     >
                       <option value="todos">Todos (Visibilidad global)</option>
                       <option value="alumno">Rol Alumno en adelante</option>
-                      <option value="miembro">Solo Miembros VIP Comunidad</option>
+                      <option value="miembro">Solo Miembros de la Comunidad</option>
                       <option value="staff">Solo Staff</option>
                     </select>
                   </div>

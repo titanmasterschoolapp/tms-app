@@ -22,7 +22,10 @@ import {
   Percent,
   CheckCircle,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Pin,
+  Edit3,
+  Settings
 } from 'lucide-react';
 import { 
   UserProfile, 
@@ -72,9 +75,10 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
   const [toolForm, setToolForm] = useState<Partial<TradingTool>>({ name: '', description: '', link: '' });
   const [discountForm, setDiscountForm] = useState<Partial<DiscountRef>>({ name: '', description: '', link: '', category: 'fondeo', code: '' });
   const [hallForm, setHallForm] = useState<Partial<HallOfFameEntry>>({ studentName: '', title: '', description: '', result: '', date: '', prize: '' });
-  const [featuredForm, setFeaturedForm] = useState<Partial<StrategyFeatured>>({ name: '', description: '', parameters: '', author: '', comments: '' });
+  const [featuredForm, setFeaturedForm] = useState<Partial<StrategyFeatured>>({ id: '', name: '', description: '', parameters: '', author: '', comments: '', orderIndex: 0, pinned: false, requiredMonths: 0 });
   const [historicalForm, setHistoricalForm] = useState<Partial<StrategyHistorical>>({ name: '', description: '', parameters: '', author: '', result: '', requiredMonths: 0 });
   const [categoryNameForm, setCategoryNameForm] = useState('');
+  const [expandedUserUid, setExpandedUserUid] = useState<string | null>(null);
   
   // Dynamic topic creator states
   const [resourceTopicForm, setResourceTopicForm] = useState({ title: '', content: '' });
@@ -192,6 +196,79 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
     loadAllData();
   };
 
+  const getUserSeniorityForDisplay = (userProfile: any): number => {
+    if (!userProfile) return 0;
+    if (userProfile.manualSeniorityMonths !== undefined && userProfile.manualSeniorityMonths !== null) {
+      return Number(userProfile.manualSeniorityMonths);
+    }
+    const dateStr = userProfile.memberJoinedAt || userProfile.joinedAt;
+    if (!dateStr) return 0;
+    const start = new Date(dateStr);
+    const end = new Date();
+    const years = end.getFullYear() - start.getFullYear();
+    const months = end.getMonth() - start.getMonth();
+    const total = years * 12 + months;
+    return total < 0 ? 0 : total;
+  };
+
+  const handleUpdateMemberJoinedAt = async (userId: string, dateVal: string) => {
+    const userToEdit = usersList.find(u => u.uid === userId);
+    if (!userToEdit) return;
+    const updatedUser = { ...userToEdit, memberJoinedAt: dateVal };
+    await DataAPI.updateUserProfile(updatedUser);
+    triggerToast(`Fecha de inicio de membresía actualizada.`);
+    loadAllData();
+  };
+
+  const handleUpdateManualSeniority = async (userId: string, monthsVal: number | null) => {
+    const userToEdit = usersList.find(u => u.uid === userId);
+    if (!userToEdit) return;
+    const updatedUser = { 
+      ...userToEdit, 
+      manualSeniorityMonths: monthsVal === null ? null : Number(monthsVal)
+    };
+    if (monthsVal === null) {
+      delete (updatedUser as any).manualSeniorityMonths;
+    }
+    await DataAPI.updateUserProfile(updatedUser);
+    triggerToast(`Antigüedad manual de ${userToEdit.displayName} actualizada.`);
+    loadAllData();
+  };
+
+  const handleToggleBlockUnlocks = async (userId: string, blockVal: boolean) => {
+    const userToEdit = usersList.find(u => u.uid === userId);
+    if (!userToEdit) return;
+    const updatedUser = { ...userToEdit, blockUnlocks: blockVal };
+    await DataAPI.updateUserProfile(updatedUser);
+    triggerToast(blockVal ? "Desbloqueos automáticos bloqueados." : "Desbloqueos automáticos permitidos.");
+    loadAllData();
+  };
+
+  const handleToggleForceUnlock = async (userId: string, forceVal: boolean) => {
+    const userToEdit = usersList.find(u => u.uid === userId);
+    if (!userToEdit) return;
+    const updatedUser = { ...userToEdit, manualForceUnlock: forceVal };
+    await DataAPI.updateUserProfile(updatedUser);
+    triggerToast(forceVal ? "Fuerza Bruta (Bypass completo) habilitado." : "Fuerza Bruta deshabilitado.");
+    loadAllData();
+  };
+
+  const handleToggleStrategyUnlock = async (userId: string, stratId: string) => {
+    const userToEdit = usersList.find(u => u.uid === userId);
+    if (!userToEdit) return;
+    const currentUnlocks = userToEdit.manualUnlocks || [];
+    let updated;
+    if (currentUnlocks.includes(stratId)) {
+      updated = currentUnlocks.filter(id => id !== stratId);
+    } else {
+      updated = [...currentUnlocks, stratId];
+    }
+    const updatedUser = { ...userToEdit, manualUnlocks: updated };
+    await DataAPI.updateUserProfile(updatedUser);
+    triggerToast(`Bypass de estrategia modificado.`);
+    loadAllData();
+  };
+
   const handleDeleteUser = async (userId: string) => {
     if (userId === currentUser.uid) {
       alert("No puedes eliminarte a ti mismo de la plataforma.");
@@ -269,7 +346,8 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
       }
       const cat: CustomCategory = {
         id: 'cat_' + Math.random().toString(36).substr(2, 9),
-        name: categoryNameForm.trim()
+        name: categoryNameForm.trim(),
+        createdAt: new Date().toISOString()
       };
       await DataAPI.saveCustomCategory(cat);
       setCategoryNameForm('');
@@ -441,24 +519,48 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
   const handleSaveFeatured = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!featuredForm.name || !featuredForm.description || !featuredForm.parameters) return;
+    const isEditing = !!featuredForm.id;
+    const finalId = isEditing ? featuredForm.id! : 'sf_' + Math.random().toString(36).substr(2, 9);
+
     const final: StrategyFeatured = {
-      id: 'sf_' + Math.random().toString(36).substr(2, 9),
+      id: finalId,
       name: featuredForm.name,
       description: featuredForm.description,
       parameters: featuredForm.parameters,
       author: featuredForm.author || 'Propio',
       comments: featuredForm.comments || '',
-      createdAt: new Date().toISOString()
+      createdAt: isEditing ? (featuredForm.createdAt || new Date().toISOString()) : new Date().toISOString(),
+      orderIndex: Number(featuredForm.orderIndex) || 0,
+      pinned: !!featuredForm.pinned,
+      requiredMonths: Number(featuredForm.requiredMonths) || 0
     };
     await DataAPI.saveStrategyFeatured(final);
-    await DataAPI.addNotificationBroadcast(
-      `⭐ Estrategia Destacada: ${final.name}`,
-      `Nueva estrategia añadida por el claustro de profesores.`,
-      'strategy'
-    );
-    setFeaturedForm({ name: '', description: '', parameters: '', author: '', comments: '' });
-    triggerToast("Estrategia destacada guardada.");
+    
+    if (!isEditing) {
+      await DataAPI.addNotificationBroadcast(
+        `⭐ Estrategia Destacada: ${final.name}`,
+        `Nueva estrategia añadida por el claustro de profesores.`,
+        'strategy'
+      );
+    }
+    setFeaturedForm({ id: '', name: '', description: '', parameters: '', author: '', comments: '', orderIndex: 0, pinned: false, requiredMonths: 0 });
+    triggerToast(isEditing ? "Estrategia destacada actualizada." : "Estrategia destacada guardada.");
     loadAllData();
+  };
+
+  const handleEditFeatured = (sf: StrategyFeatured) => {
+    setFeaturedForm({
+      id: sf.id,
+      name: sf.name,
+      description: sf.description,
+      parameters: sf.parameters,
+      author: sf.author || '',
+      comments: sf.comments || '',
+      orderIndex: sf.orderIndex || 0,
+      pinned: !!sf.pinned,
+      requiredMonths: sf.requiredMonths || 0,
+      createdAt: sf.createdAt
+    });
   };
 
   const handleDeleteFeatured = async (id: string) => {
@@ -620,169 +722,308 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                     .map((user) => {
                       const isCurrentUserRow = user.uid === currentUser.uid;
                       const manualUnlocks = user.manualUnlocks || [];
+                      const isExpanded = expandedUserUid === user.uid;
                       
                       return (
-                        <tr id={`user-row-${user.uid}`} key={user.uid} className="hover:bg-zinc-900/10">
-                          
-                          {/* Photo Avatar & displays profile */}
-                          <td className="py-3 px-2">
-                            <div className="flex items-center gap-2">
-                              {user.avatarUrl ? (
-                                <div className="relative group">
-                                  <img 
-                                    src={user.avatarUrl} 
-                                    alt={user.displayName} 
-                                    className="w-8 h-8 rounded-full object-cover border border-white/10"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                  <button
-                                    id={`remove-user-avatar-${user.uid}`}
-                                    onClick={() => handleRemovePhoto(user.uid)}
-                                    title="Quitar foto (Incumple normas)"
-                                    className="absolute -top-1 -right-1 bg-red-650 hover:bg-red-650 text-white p-0.5 rounded-full border border-zinc-950 scale-75 cursor-pointer text-[8px]"
-                                  >
-                                    ✕
-                                  </button>
+                        <React.Fragment key={user.uid}>
+                          <tr id={`user-row-${user.uid}`} className={`hover:bg-zinc-900/10 transition-colors ${isExpanded ? 'bg-zinc-900/10' : ''}`}>
+                            
+                            {/* Photo Avatar & displays profile */}
+                            <td className="py-3 px-2">
+                              <div className="flex items-center gap-2">
+                                {user.avatarUrl ? (
+                                  <div className="relative group">
+                                    <img 
+                                      src={user.avatarUrl} 
+                                      alt={user.displayName} 
+                                      className="w-8 h-8 rounded-full object-cover border border-white/10"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                    <button
+                                      id={`remove-user-avatar-${user.uid}`}
+                                      onClick={() => handleRemovePhoto(user.uid)}
+                                      title="Quitar foto (Incumple normas)"
+                                      className="absolute -top-1 -right-1 bg-red-650 hover:bg-red-650 text-white p-0.5 rounded-full border border-zinc-950 scale-75 cursor-pointer text-[8px]"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-zinc-400 font-mono text-[10px]">
+                                    {user.displayName.slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="font-semibold text-white truncate max-w-[120px]">{user.displayName}</div>
+                                  <span className="text-[8px] text-zinc-500 uppercase font-mono tracking-widest">{user.role || 'SIN ROL'}</span>
                                 </div>
-                              ) : (
-                                <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-zinc-400 font-mono text-[10px]">
-                                  {user.displayName.slice(0, 2).toUpperCase()}
-                                </div>
-                              )}
-                              <div>
-                                <div className="font-semibold text-white truncate max-w-[120px]">{user.displayName}</div>
-                                <span className="text-[8px] text-zinc-500 uppercase font-mono tracking-widest">{user.role || 'SIN ROL'}</span>
                               </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Editable Display Name inline */}
-                          <td className="py-3 px-2">
-                            <input
-                              id={`edit-username-input-${user.uid}`}
-                              type="text"
-                              defaultValue={user.displayName}
-                              onBlur={(e) => handleUpdateName(user.uid, e.target.value)}
-                              placeholder="Editar nombre..."
-                              className="bg-zinc-950 border border-zinc-800 focus:outline-none focus:border-violet-500 rounded p-1 text-xs text-white w-28 font-mono"
-                            />
-                          </td>
+                            {/* Editable Display Name inline */}
+                            <td className="py-3 px-2">
+                              <input
+                                id={`edit-username-input-${user.uid}`}
+                                type="text"
+                                defaultValue={user.displayName}
+                                onBlur={(e) => handleUpdateName(user.uid, e.target.value)}
+                                placeholder="Editar nombre..."
+                                className="bg-zinc-950 border border-zinc-800 focus:outline-none focus:border-violet-500 rounded p-1 text-xs text-white w-28 font-mono"
+                              />
+                            </td>
 
-                          <td className="py-3 px-2 text-zinc-400 font-mono truncate max-w-[130px]">{user.email}</td>
-                          
-                          {/* Role selecting */}
-                          <td className="py-3 px-2">
-                            <select
-                              id={`user-role-select-${user.uid}`}
-                              value={user.role === null ? "" : user.role}
-                              disabled={isCurrentUserRow}
-                              onChange={(e) => handleRoleChange(user.uid, (e.target.value === "" ? null : e.target.value) as any)}
-                              className="bg-zinc-950 border border-zinc-850 rounded-lg p-1.5 text-xs text-zinc-305 outline-none focus:border-violet-500 font-mono"
-                            >
-                              <option value="">Sin Rol (Pendiente)</option>
-                              <option value="alumno">Alumno (Libre)</option>
-                              <option value="miembro">Miembro (VIP)</option>
-                              <option value="moderador">Moderador (Chat)</option>
-                              <option value="colaborador">Colaborador</option>
-                              <option value="administrador">Administrador</option>
-                            </select>
-                          </td>
+                            <td className="py-3 px-2 text-zinc-400 font-mono truncate max-w-[130px]">{user.email}</td>
+                            
+                            {/* Role selecting */}
+                            <td className="py-3 px-2">
+                              <select
+                                id={`user-role-select-${user.uid}`}
+                                value={user.role === null ? "" : user.role}
+                                disabled={isCurrentUserRow}
+                                onChange={(e) => handleRoleChange(user.uid, (e.target.value === "" ? null : e.target.value) as any)}
+                                className="bg-zinc-950 border border-zinc-850 rounded-lg p-1.5 text-xs text-zinc-305 outline-none focus:border-violet-500 font-mono"
+                              >
+                                <option value="">Sin Rol (Pendiente)</option>
+                                <option value="alumno">Alumno (Libre)</option>
+                                <option value="miembro">Miembro (Comunidad)</option>
+                                <option value="moderador">Moderador (Chat)</option>
+                                <option value="colaborador">Colaborador</option>
+                                <option value="administrador">Administrador</option>
+                              </select>
+                            </td>
 
-                          {/* Approval Switch */}
-                          <td className="py-3 px-2">
-                            <button
-                              id={`toggle-approved-btn-${user.uid}`}
-                              onClick={() => handleToggleApproved(user.uid)}
-                              disabled={isCurrentUserRow}
-                              className={`flex items-center gap-1.5 py-1 px-2 rounded-lg text-[9px] font-bold tracking-wide font-mono transition-all ${
-                                user.approved 
-                                ? 'bg-violet-500/10 border border-violet-500/20 text-[#a78bfa]' 
-                                : 'bg-rose-500/10 border border-rose-500/25 text-rose-400'
-                              }`}
-                            >
-                              {user.approved ? (
-                                <>
-                                  <ToggleRight className="w-4 h-4 text-[#a78bfa]" />
-                                  <span>APROBADO</span>
-                                </>
-                              ) : (
-                                <>
-                                  <ToggleLeft className="w-4 h-4 text-rose-400" />
-                                  <span>PENDIENTE</span>
-                                </>
-                              )}
-                            </button>
-                          </td>
+                            {/* Approval Switch */}
+                            <td className="py-3 px-2">
+                              <button
+                                id={`toggle-approved-btn-${user.uid}`}
+                                onClick={() => handleToggleApproved(user.uid)}
+                                disabled={isCurrentUserRow}
+                                className={`flex items-center gap-1.5 py-1 px-2 rounded-lg text-[9px] font-bold tracking-wide font-mono transition-all ${
+                                  user.approved 
+                                  ? 'bg-violet-500/10 border border-violet-500/20 text-[#a78bfa]' 
+                                  : 'bg-rose-500/10 border border-rose-500/25 text-rose-400'
+                                }`}
+                              >
+                                {user.approved ? (
+                                  <>
+                                    <ToggleRight className="w-4 h-4 text-[#a78bfa]" />
+                                    <span>APROBADO</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ToggleLeft className="w-4 h-4 text-rose-400" />
+                                    <span>PENDIENTE</span>
+                                  </>
+                                )}
+                              </button>
+                            </td>
 
-                          {/* Subscription Status Toggle */}
-                          <td className="py-3 px-2">
-                            <button
-                              id={`toggle-sub-btn-${user.uid}`}
-                              onClick={() => handleToggleMensualidad(user.uid)}
-                              disabled={isCurrentUserRow}
-                              className={`flex items-center gap-1.5 py-1 px-2 rounded-lg text-[9px] font-bold tracking-wide font-mono transition-all ${
-                                user.mensualidadActive 
-                                ? 'bg-emerald-500/10 border border-[#10b981]/20 text-emerald-400' 
-                                : 'bg-zinc-950 border border-zinc-850 text-zinc-500'
-                              }`}
-                            >
-                              {user.mensualidadActive ? (
-                                <>
-                                  <ToggleRight className="w-4 h-4 text-emerald-400" />
-                                  <span>VIP ACTIVO</span>
-                                </>
-                              ) : (
-                                <>
-                                  <ToggleLeft className="w-4 h-4 text-zinc-700" />
-                                  <span>BLOQUEADO</span>
-                                </>
-                              )}
-                            </button>
-                          </td>
+                            {/* Subscription Status Toggle */}
+                            <td className="py-3 px-2">
+                              <button
+                                id={`toggle-sub-btn-${user.uid}`}
+                                onClick={() => handleToggleMensualidad(user.uid)}
+                                disabled={isCurrentUserRow}
+                                className={`flex items-center gap-1.5 py-1 px-2 rounded-lg text-[9px] font-bold tracking-wide font-mono transition-all ${
+                                  user.mensualidadActive 
+                                  ? 'bg-emerald-500/10 border border-[#10b981]/20 text-emerald-400' 
+                                  : 'bg-zinc-950 border border-zinc-850 text-zinc-500'
+                                }`}
+                              >
+                                {user.mensualidadActive ? (
+                                  <>
+                                    <ToggleRight className="w-4 h-4 text-emerald-400" />
+                                    <span>SUSCRIPCIÓN ACTIVA</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ToggleLeft className="w-4 h-4 text-zinc-700" />
+                                    <span>BLOQUEADO</span>
+                                  </>
+                                )}
+                              </button>
+                            </td>
 
-                          {/* Registration Date */}
-                          <td className="py-3 px-2 text-zinc-400 font-mono text-[10px] whitespace-nowrap">
-                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/D'}
-                          </td>
+                            {/* Registration Date */}
+                            <td className="py-3 px-2 text-zinc-400 font-mono text-[10px] whitespace-nowrap">
+                              {user.createdAt ? new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/D'}
+                            </td>
 
-                          {/* Optional Bypass strategy locking manually */}
-                          <td className="py-3 px-1">
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {['1', '2', '3', '6', '12'].map((m) => {
-                                const isUnlocked = manualUnlocks.includes(m);
-                                return (
-                                  <button
-                                    id={`manual-unlock-${user.uid}-${m}`}
-                                    key={m}
-                                    onClick={() => handleToggleUnlock(user.uid, m)}
-                                    title={`Bypasear bloqueo temporal de mes ${m} para este alumno`}
-                                    className={`text-[9px] font-mono px-1.5 py-0.5 rounded border transition-all ${
-                                      isUnlocked 
-                                      ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 font-black' 
-                                      : 'bg-zinc-950 border-zinc-900 text-zinc-600 hover:text-zinc-550'
-                                    }`}
-                                  >
-                                    MEs {m}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </td>
+                            {/* Optional Bypass strategy locking manually */}
+                            <td className="py-3 px-1">
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {['1', '2', '3', '6', '12'].map((m) => {
+                                  const isUnlocked = manualUnlocks.includes(m);
+                                  return (
+                                    <button
+                                      id={`manual-unlock-${user.uid}-${m}`}
+                                      key={m}
+                                      onClick={() => handleToggleUnlock(user.uid, m)}
+                                      title={`Bypasear bloqueo temporal de mes ${m} para este alumno`}
+                                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded border transition-all ${
+                                        isUnlocked 
+                                        ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 font-black' 
+                                        : 'bg-zinc-950 border-zinc-900 text-zinc-600 hover:text-zinc-550'
+                                      }`}
+                                    >
+                                      MEs {m}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </td>
 
-                          {/* Delete user button */}
-                          <td className="py-3 px-2 text-right">
-                            <button
-                              id={`delete-user-btn-${user.uid}`}
-                              onClick={() => handleDeleteUser(user.uid)}
-                              disabled={isCurrentUserRow}
-                              title="Dar de baja permanente"
-                              className="p-1 text-zinc-600 hover:text-red-400 hover:bg-zinc-950/25 rounded transition-colors disabled:opacity-30"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
+                            {/* Delete & Settings user buttons */}
+                            <td className="py-3 px-2 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setExpandedUserUid(isExpanded ? null : user.uid)}
+                                  className={`p-1 rounded transition-colors ${isExpanded ? 'text-pink-405 bg-pink-500/10' : 'text-zinc-500 hover:text-white'}`}
+                                  title="Gestionar Antigüedad y Desbloqueos de Estrategias"
+                                >
+                                  <Settings className="w-4 h-4 cursor-pointer" />
+                                </button>
+                                <button
+                                  id={`delete-user-btn-${user.uid}`}
+                                  onClick={() => handleDeleteUser(user.uid)}
+                                  disabled={isCurrentUserRow}
+                                  title="Dar de baja permanente"
+                                  className="p-1 text-zinc-600 hover:text-red-400 hover:bg-zinc-950/25 rounded transition-colors disabled:opacity-30 cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
 
-                        </tr>
+                          </tr>
+
+                          {/* Extended details panel with date joined inputs, block bypass locks, force unlocks etc. */}
+                          {isExpanded && (
+                            <tr className="bg-zinc-950/45 border-b border-zinc-850">
+                              <td colSpan={9} className="p-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-xs text-left">
+                                  
+                                  {/* COL 1: ANTIGÜEDAD */}
+                                  <div className="space-y-3 bg-zinc-900/10 p-4 rounded-xl border border-zinc-850">
+                                    <h4 className="text-[10px] font-mono uppercase font-bold text-pink-400 tracking-wider">⏱️ Antigüedad de Membresía</h4>
+                                    
+                                    <div className="space-y-1">
+                                      <label className="block text-zinc-400 text-[10px] uppercase font-mono tracking-wider">Fecha inicio como miembro:</label>
+                                      <input
+                                        type="date"
+                                        value={user.memberJoinedAt ? user.memberJoinedAt.substring(0, 10) : (user.joinedAt ? user.joinedAt.substring(0, 10) : '')}
+                                        onChange={(e) => handleUpdateMemberJoinedAt(user.uid, e.target.value)}
+                                        className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-white font-mono text-xs"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <div className="flex items-center justify-between text-[10px]">
+                                        <span className="text-zinc-400 uppercase font-mono tracking-wider">Antigüedad Manual (Meses):</span>
+                                        {user.manualSeniorityMonths !== undefined && user.manualSeniorityMonths !== null && (
+                                          <button onClick={() => handleUpdateManualSeniority(user.uid, null)} className="text-pink-400 font-bold hover:underline">Reset</button>
+                                        )}
+                                      </div>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        placeholder="Ej: 3"
+                                        value={user.manualSeniorityMonths !== undefined && user.manualSeniorityMonths !== null ? user.manualSeniorityMonths : ''}
+                                        onChange={(e) => handleUpdateManualSeniority(user.uid, e.target.value === '' ? null : Number(e.target.value))}
+                                        className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-white font-mono text-xs"
+                                      />
+                                    </div>
+
+                                    <div className="p-3 bg-zinc-950 rounded-lg border border-zinc-850 font-mono text-[10px] text-slate-400 space-y-1">
+                                      <div>Antigüedad actual calculada: <strong className="text-white font-bold">{getUserSeniorityForDisplay(user)} {getUserSeniorityForDisplay(user) === 1 ? 'Mes' : 'Meses'}</strong></div>
+                                      <div className="text-[9px] text-zinc-550 italic leading-snug">Calculado basándose en la fecha de alta real o valor establecido manualmente.</div>
+                                    </div>
+                                  </div>
+
+                                  {/* COL 2: LIMITADORES */}
+                                  <div className="space-y-3 bg-zinc-900/10 p-4 rounded-xl border border-zinc-850">
+                                    <h4 className="text-[10px] font-mono uppercase font-bold text-violet-400 tracking-wider">🔒 Limitadores y Fuerza Bruta</h4>
+                                    
+                                    {/* Block unlocks check */}
+                                    <label className="flex items-start gap-2.5 p-2 bg-zinc-950/70 rounded-lg border border-zinc-850 cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={!!user.blockUnlocks}
+                                        onChange={(e) => handleToggleBlockUnlocks(user.uid, e.target.checked)}
+                                        className="rounded border-zinc-800 bg-zinc-900 text-purple-500 focus:ring-purple-500 w-4 h-4 mt-0.5"
+                                      />
+                                      <div>
+                                        <span className="block text-white font-bold text-xs">Bloquear Desbloqueos</span>
+                                        <span className="block text-[9px] text-zinc-500 leading-normal mt-0.5">Impide por completo que este usuario desbloquee estrategias usando su antigüedad.</span>
+                                      </div>
+                                    </label>
+
+                                    {/* Force unlock bypass check */}
+                                    <label className="flex items-start gap-2.5 p-2 bg-zinc-950/70 rounded-lg border border-zinc-850 cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={!!user.manualForceUnlock}
+                                        onChange={(e) => handleToggleForceUnlock(user.uid, e.target.checked)}
+                                        className="rounded border-zinc-800 bg-zinc-900 text-purple-500 focus:ring-purple-500 w-4 h-4 mt-0.5"
+                                      />
+                                      <div>
+                                        <span className="block text-white font-bold text-xs">Fuerza Bruta (Bypass total)</span>
+                                        <span className="block text-[9px] text-zinc-500 leading-normal mt-0.5">Otorga acceso instantáneo a todas las estrategias en la academia.</span>
+                                      </div>
+                                    </label>
+                                  </div>
+
+                                  {/* COL 3: BYPASS MANUAL */}
+                                  <div className="space-y-3 bg-zinc-900/10 p-4 rounded-xl border border-zinc-850">
+                                    <h4 className="text-[10px] font-mono uppercase font-bold text-pink-400 tracking-wider">🎯 Desbloquear Manualmente</h4>
+                                    <p className="text-[9px] text-zinc-500 leading-normal mb-2">Presiona una estrategia para concederle un bypass de antigüedad individual a este usuario:</p>
+
+                                    <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                                      <div className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider font-mono">Estrategias Destacadas</div>
+                                      {featuredStrats.map(sf => {
+                                        const isUnlocked = (user.manualUnlocks || []).includes(sf.id);
+                                        return (
+                                          <button
+                                            key={sf.id}
+                                            onClick={() => handleToggleStrategyUnlock(user.uid, sf.id)}
+                                            className={`w-full text-left p-1.5 rounded text-[9px] flex items-center justify-between border transition-colors ${
+                                              isUnlocked 
+                                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-bold' 
+                                              : 'bg-zinc-950 border-zinc-850 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                                            }`}
+                                          >
+                                            <span className="truncate max-w-[135px]">{sf.name}</span>
+                                            <span className="text-[8px] font-mono shrink-0">{isUnlocked ? 'DESBLOQUEADO' : 'CERRADO'}</span>
+                                          </button>
+                                        );
+                                      })}
+
+                                      <div className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider font-mono mt-3">Estrategias Históricas</div>
+                                      {historicalStrats.map(sh => {
+                                        const isUnlocked = (user.manualUnlocks || []).includes(sh.id);
+                                        return (
+                                          <button
+                                            key={sh.id}
+                                            onClick={() => handleToggleStrategyUnlock(user.uid, sh.id)}
+                                            className={`w-full text-left p-1.5 rounded text-[9px] flex items-center justify-between border transition-colors ${
+                                              isUnlocked 
+                                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-bold' 
+                                              : 'bg-zinc-950 border-zinc-850 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                                            }`}
+                                          >
+                                            <span className="truncate max-w-[135px]">{sh.name}</span>
+                                            <span className="text-[8px] font-mono shrink-0">{isUnlocked ? 'DESBLOQUEADO' : 'CERRADO'}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })
                 )}
@@ -1111,7 +1352,8 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
             
             {/* Featured Strategies Admin Form */}
             <div className="bg-zinc-900/20 border border-zinc-850 p-5 rounded-2xl space-y-4">
-              <h3 className="text-xs font-sans font-bold text-white uppercase tracking-wider font-mono flex items-center gap-1.5 text-pink-400"><Flame className="w-4 h-4 text-pink-400" /> Estrategias Destacadas del Equipo</h3>
+              <h3 className="text-xs font-sans font-bold text-white uppercase tracking-wider font-mono flex items-center gap-1.5 text-pink-400"><Flame className="w-4 h-4 text-pink-400" /> Estrategias Destacadas Académicas</h3>
+              
               <form onSubmit={handleSaveFeatured} className="space-y-3 text-xs">
                 <input
                   id="feat-strat-name"
@@ -1121,6 +1363,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                   onChange={(e) => setFeaturedForm({ ...featuredForm, name: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white font-bold"
                 />
+                
                 <textarea
                   id="feat-strat-desc"
                   placeholder="Explicación del método..."
@@ -1129,6 +1372,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                   onChange={(e) => setFeaturedForm({ ...featuredForm, description: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white"
                 />
+                
                 <input
                   id="feat-strat-param"
                   type="text"
@@ -1137,6 +1381,7 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                   onChange={(e) => setFeaturedForm({ ...featuredForm, parameters: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white font-mono"
                 />
+                
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     id="feat-strat-author"
@@ -1155,21 +1400,87 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                     className="bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white"
                   />
                 </div>
-                <button id="feat-submit-btn" type="submit" className="w-full py-2 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-lg transition-colors text-xs flex items-center justify-center gap-1">
-                  GUARDAR Y DESTACAR ESTRATEGIA
-                </button>
+
+                {/* Pin + Order Custom Controls */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-zinc-950/40 rounded-xl border border-zinc-850">
+                  <div className="space-y-1">
+                    <label className="block text-zinc-500 text-[9px] font-mono uppercase font-bold tracking-wider">Prioridad Orden</label>
+                    <input
+                      type="number"
+                      placeholder="Índice (Ej: 0, 1, 2)"
+                      value={featuredForm.orderIndex || 0}
+                      onChange={(e) => setFeaturedForm({ ...featuredForm, orderIndex: Number(e.target.value) })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded p-1.5 text-white text-xs font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-zinc-500 text-[9px] font-mono uppercase font-bold tracking-wider">Antigüedad Exigida</label>
+                    <select
+                      value={featuredForm.requiredMonths || 0}
+                      onChange={(e) => setFeaturedForm({ ...featuredForm, requiredMonths: Number(e.target.value) })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded p-1.5 text-white text-[11px] font-mono h-[30px]"
+                    >
+                      <option value={0}>Inmediato (0)</option>
+                      <option value={1}>1 mes</option>
+                      <option value={3}>3 meses</option>
+                      <option value={6}>6 meses</option>
+                      <option value={12}>12 meses</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-center pt-2">
+                    <label className="flex items-center gap-1.5 text-zinc-300 font-semibold cursor-pointer select-none text-[10px]">
+                      <input
+                        type="checkbox"
+                        checked={featuredForm.pinned || false}
+                        onChange={(e) => setFeaturedForm({ ...featuredForm, pinned: e.target.checked })}
+                        className="rounded border-zinc-800 bg-zinc-900 text-pink-500 focus:ring-pink-500 w-3.5 h-3.5"
+                      />
+                      <span>Fijar arriba / Pin</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button id="feat-submit-btn" type="submit" className="flex-1 py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-bold rounded-lg transition-colors text-xs flex items-center justify-center gap-1">
+                    {featuredForm.id ? 'ACTUALIZAR ESTRATEGIA' : 'GUARDAR Y DESTACAR ESTRATEGIA'}
+                  </button>
+                  {featuredForm.id && (
+                    <button
+                      type="button"
+                      onClick={() => setFeaturedForm({ id: '', name: '', description: '', parameters: '', author: '', comments: '', orderIndex: 0, pinned: false, requiredMonths: 0 })}
+                      className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
               </form>
 
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                 {featuredStrats.map((sf) => (
-                  <div id={`feat-strat-el-${sf.id}`} key={sf.id} className="p-3 bg-zinc-950/45 border border-zinc-850 rounded-xl flex items-center justify-between text-xs">
+                  <div id={`feat-strat-el-${sf.id}`} key={sf.id} className="p-3 bg-zinc-950/45 border border-zinc-850 rounded-xl flex items-center justify-between text-xs transition-all">
                     <div>
-                      <span className="font-bold text-white block">{sf.name}</span>
-                      <span className="text-[10px] text-zinc-500 font-mono block">Params: {sf.parameters}</span>
+                      <span className="font-bold text-white flex items-center gap-1 text-[11px]">
+                        {sf.pinned && <Pin className="w-3 h-3 text-pink-400 rotate-45 shrink-0" />}
+                        {sf.name}
+                        {sf.requiredMonths > 0 && (
+                          <span className="text-[8px] bg-pink-500/10 border border-pink-500/20 text-pink-400 px-1 rounded font-mono uppercase font-semibold">
+                            Mes {sf.requiredMonths}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-[9px] text-zinc-500 font-mono block">Orden: {sf.orderIndex || 0} | Params: {sf.parameters}</span>
                     </div>
-                    <button id={`delete-feat-${sf.id}`} onClick={() => handleDeleteFeatured(sf.id)} className="text-zinc-500 hover:text-red-400">
-                      <Trash2 className="w-4.5 h-4.5" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button id={`edit-feat-${sf.id}`} onClick={() => handleEditFeatured(sf)} className="text-zinc-500 hover:text-white transition-colors" title="Editar">
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button id={`delete-feat-${sf.id}`} onClick={() => handleDeleteFeatured(sf.id)} className="text-zinc-500 hover:text-red-400 transition-colors" title="Eliminar">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

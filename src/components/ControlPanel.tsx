@@ -21,7 +21,7 @@ export default function ControlPanel({
 }: ControlPanelProps) {
   const roles: { val: UserRole; label: string; desc: string }[] = [
     { val: 'alumno', label: 'Alumno', desc: 'Acceso básico a recursos y herramientas libres.' },
-    { val: 'miembro', label: 'Miembro', desc: 'Acceso al chat de la comunidad y estrategias VIP.' },
+    { val: 'miembro', label: 'Miembro', desc: 'Acceso al chat de la comunidad y estrategias avanzadas.' },
     { val: 'moderador', label: 'Mod', desc: 'Permite silenciar y ocultar mensajes en los chats.' },
     { val: 'colaborador', label: 'Colaborador', desc: 'Edita recursos, reuniones, avisos y estrategias.' },
     { val: 'administrador', label: 'Admin', desc: 'Control absoluto sobre usuarios, roles y finanzas.' }

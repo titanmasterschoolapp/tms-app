@@ -206,7 +206,8 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
     if (category === 'Comunidad') {
       return ['miembro', 'moderador', 'colaborador', 'administrador'].includes(role);
     }
-    return true; // 'Chat·General' is open for all
+    // 'Chat·General' is visible to all academic roles, but not to 'none' / sin-rol
+    return ['alumno', 'miembro', 'moderador', 'colaborador', 'administrador'].includes(role);
   };
 
   // Convert name to slug format (lowercase, replace spaces/unsupported chars with hyphens)
@@ -463,7 +464,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
       case 'moderador':
         return <span className="bg-purple-500/10 border border-purple-500/30 text-purple-455 text-[8px] px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider flex items-center gap-1"><Shield className="w-2.5 h-2.5" /> Mod</span>;
       case 'miembro':
-        return <span className="bg-pink-500/10 border border-pink-500/30 text-pink-455 text-[8px] px-1.5 py-0.5 rounded font-mono uppercase tracking-widest text-[8px] font-black">Socio VIP</span>;
+        return <span className="bg-pink-500/10 border border-pink-500/30 text-pink-455 text-[8px] px-1.5 py-0.5 rounded font-mono uppercase tracking-widest text-[8px] font-black">Miembro</span>;
       default:
         return <span className="bg-zinc-900 border border-zinc-800 text-zinc-400 text-[8px] px-1.5 py-0.5 rounded font-mono uppercase tracking-wider font-bold">Alumno</span>;
     }
@@ -699,7 +700,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
                 {activeChannel.name}
               </span>
               <p className="text-[9.5px] text-slate-500 font-medium tracking-tight truncate hidden sm:block">
-                Canal {activeChannel.category === 'Chat·General' ? 'público para todos los alumnos' : activeChannel.category === 'Comunidad' ? 'exclusivo para Socios de la Comunidad VIP' : 'privado para el Claustro Técnico'}  •  Por {activeChannel.onlyStaffCanWrite ? 'solo lectura' : 'sala abierta para debate'}
+                Canal {activeChannel.category === 'Chat·General' ? 'público para todos los alumnos' : activeChannel.category === 'Comunidad' ? 'exclusivo para miembros de la comunidad' : 'privado para el Claustro Técnico'}  •  Por {activeChannel.onlyStaffCanWrite ? 'solo lectura' : 'sala abierta para debate'}
               </p>
             </div>
           </div>
@@ -729,7 +730,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
                   Canal Reservado: #{activeChannel.name}
                 </h3>
                 <p className="text-[11px] text-slate-400 leading-relaxed font-sans mt-2">
-                  Esta sala de debates técnicos avanzados está reservada de manera exclusiva para <strong>Miembros de la Comunidad VIP</strong> (Membresía Hotmart) o integrantes del claustro de Titan Master School.
+                  Esta sala de debates técnicos avanzados está reservada de manera exclusiva para <strong>Miembros de la comunidad</strong> (Membresía Hotmart) o integrantes del claustro de Titan Master School.
                 </p>
               </div>
 
@@ -739,7 +740,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
                     <span className="text-[8px] font-mono text-slate-500 uppercase font-black block">Beneficios de la Comunidad</span>
                     <ul className="space-y-1 text-[10px] text-slate-300">
                       <li className="flex items-center gap-1.5">
-                        <Sparkles className="w-3 text-pink-400 shrink-0" /> Acceso a todos los debates técnicos VIP
+                        <Sparkles className="w-3 text-pink-400 shrink-0" /> Acceso a todos los debates técnicos de la comunidad
                       </li>
                       <li className="flex items-center gap-1.5">
                         <Sparkles className="w-3 text-pink-400 shrink-0" /> Capturas de análisis diarios del mercado
@@ -754,7 +755,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
                     onClick={() => window.open('https://hotmart.com', '_blank')}
                     className="w-full py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-sans font-bold text-[10.5px] rounded-xl shadow-lg border border-pink-500/30 hover:scale-[1.01] transition-all cursor-pointer uppercase tracking-wider"
                   >
-                    CONTRATAR MENSUALIDAD VIP ↗
+                    CONTRATAR MENSUALIDAD EN HOTMART ↗
                   </button>
                 </div>
               )}
@@ -1133,7 +1134,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
                   className="w-full bg-zinc-950 border border-white/10 rounded-xl py-3 px-4 text-xs text-white focus:outline-none focus:border-purple-500 font-bold tracking-wider"
                 >
                   <option value="Chat·General">GENERAL (Todo público)</option>
-                  <option value="Comunidad">COMUNIDAD (Solo Socios VIP)</option>
+                  <option value="Comunidad">COMUNIDAD (Solo Miembros de la Comunidad)</option>
                   <option value="Claustro">CLAUSTRO INTERNO (Solo Staff)</option>
                 </select>
               </div>

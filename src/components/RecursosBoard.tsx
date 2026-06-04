@@ -120,9 +120,22 @@ export default function RecursosBoard({
 
   const activeTopic = filteredTopics.find(t => t.id === selectedTopicId) || sortedTopics.find(t => t.id === selectedTopicId);
 
+  // Automatic scroll to top when category, topic, or channel changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [selectedTopicId, selectedCategory, channelId]);
+
+  const prevRepliesLengthRef = useRef<number | undefined>(activeTopic?.replies?.length);
+
   // Scroll to bottom of comments when comments length changes, preserving initial scroll position on selection
   useEffect(() => {
-    commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const prevLength = prevRepliesLengthRef.current;
+    const currentLength = activeTopic?.replies?.length;
+    prevRepliesLengthRef.current = currentLength;
+
+    if (prevLength !== undefined && currentLength !== undefined && currentLength > prevLength) {
+      commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [activeTopic?.replies?.length]);
 
   // Handler for topic change scroll to top as requested

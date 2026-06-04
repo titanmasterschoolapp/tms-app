@@ -194,6 +194,11 @@ export default function CategorizedPanel({ parentChannel, currentUser, onRefresh
     setHeaderFormName(parentChannel.name);
   }, [parentChannel.id]);
 
+  // Scroll to top of window whenever active subchannel, active thread, or parent channel changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [selectedSubChannelId, parentChannel.id, activeThreadId]);
+
   // Subscribe to scoped chat messages if the active subchannel is clicked and type is 'chat'
   useEffect(() => {
     if (!selectedSubChannelId || parentChannel.type !== 'chat') {

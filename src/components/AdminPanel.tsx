@@ -786,9 +786,11 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                                 <option value="">Sin Rol (Pendiente)</option>
                                 <option value="alumno">Alumno (Libre)</option>
                                 <option value="miembro">Miembro (Comunidad)</option>
+                                <option value="veterano">Veterano (Comunidad)</option>
+                                <option value="old_school">OLD SCHOOL (Comunidad)</option>
                                 <option value="moderador">Moderador (Chat)</option>
                                 <option value="colaborador">Colaborador</option>
-                                <option value="administrador">Administrador</option>
+                                <option value="administrador font-bold">Administrador</option>
                               </select>
                             </td>
 

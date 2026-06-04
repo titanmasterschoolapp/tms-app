@@ -35,7 +35,18 @@ import {
   Download,
   Shield,
   Copy,
-  Pin
+  Plus,
+  Edit3,
+  Trash2,
+  Pin,
+  X,
+  Trophy,
+  Calculator,
+  TrendingUp,
+  Star,
+  FileText,
+  Camera,
+  Lightbulb
 } from 'lucide-react';
 
 import { 
@@ -50,9 +61,12 @@ import {
   StrategyHistorical, 
   AppNotification,
   ResourceTopic,
-  ToolTopic
+  ToolTopic,
+  ChatChannel,
+  FundingCompany,
+  DashboardTexts
 } from './types';
-import { DataAPI } from './lib/db';
+import { DataAPI, DEFAULT_DASHBOARD_TEXTS } from './lib/db';
 import { isFirebaseConfigured } from './firebase';
 
 import CalculadoraLotes from './components/CalculadoraLotes';
@@ -62,6 +76,7 @@ import ChatPanel from './components/ChatPanel';
 import AdminPanel from './components/AdminPanel';
 import RecursosBoard from './components/RecursosBoard';
 import HerramientasBoard from './components/HerramientasBoard';
+import CategorizedPanel from './components/CategorizedPanel';
 
 export const getUserSeniority = (userProfile: any): number => {
   if (!userProfile) return 0;
@@ -78,6 +93,14 @@ export const getUserSeniority = (userProfile: any): number => {
   const months = end.getMonth() - start.getMonth();
   const total = years * 12 + months;
   return total < 0 ? 0 : total;
+};
+
+export const formatChannelName = (item: { id: string; name: string }): string => {
+  let cleanName = item.name || '';
+  if (cleanName.startsWith('#')) {
+    cleanName = cleanName.slice(1).trim();
+  }
+  return cleanName;
 };
 
 export default function App() {
@@ -117,6 +140,195 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
+  // Dynamic Channel state & FundingCompany state
+  const [channels, setChannels] = useState<ChatChannel[]>([]);
+  const [companies, setCompanies] = useState<FundingCompany[]>([]);
+  
+  // Dashboard & global customized text states
+  const [dashboardTexts, setDashboardTexts] = useState<DashboardTexts>(DEFAULT_DASHBOARD_TEXTS);
+  const [editingTextKey, setEditingTextKey] = useState<keyof DashboardTexts | null>(null);
+  const [editingTextValue, setEditingTextValue] = useState<string>('');
+
+  // Dropdown selectors for partners on main dashboard
+  const [dashCompany1Id, setDashCompany1Id] = useState<string>(() => localStorage.getItem('TM_dashCompany1Id') || '');
+  const [dashCompany2Id, setDashCompany2Id] = useState<string>(() => localStorage.getItem('TM_dashCompany2Id') || '');
+
+  // Channel Creation/Modification modal states
+  const [showChannelModal, setShowChannelModal] = useState(false);
+  const [editingChannel, setEditingChannel] = useState<ChatChannel | null>(null);
+  const [formChannelName, setFormChannelName] = useState('');
+  const [formChannelCategory, setFormChannelCategory] = useState<'alumno' | 'comunidad'>('alumno');
+  const [formChannelType, setFormChannelType] = useState<any>('chat');
+  const [formChannelPinned, setFormChannelPinned] = useState(false);
+  const [formChannelOrder, setFormChannelOrder] = useState(0);
+  const [formChannelOnlyStaff, setFormChannelOnlyStaff] = useState(false);
+  const [formChannelIconKey, setFormChannelIconKey] = useState<string>('chat');
+  const [formChannelAllowedRoles, setFormChannelAllowedRoles] = useState<UserRole[]>([]);
+  const [confirmDeleteChannel, setConfirmDeleteChannel] = useState(false);
+
+  // Global lookup mapping keys to Lucide React icons
+  const ICON_GALLERY: Record<string, { label: string; icon: any }> = {
+    chat: { label: '💬 Chat', icon: MessageSquare },
+    libro: { label: '📚 Libro', icon: BookOpen },
+    herramienta: { label: '🛠️ Herramienta', icon: Wrench },
+    trofeo: { label: '🏆 Trofeo', icon: Trophy },
+    campana: { label: '🔔 Campana', icon: Bell },
+    calculadora: { label: '🧮 Calculadora', icon: Calculator },
+    grafico: { label: '📈 Gráfico', icon: TrendingUp },
+    fuego: { label: '🔥 Fuego', icon: Flame },
+    estrella: { label: '⭐ Estrella', icon: Star },
+    archivo: { label: '📄 Archivo', icon: FileText },
+    candado: { label: '🔒 Candado', icon: Lock },
+    camara: { label: '📷 Cámara', icon: Camera },
+    luces: { label: '💡 Idea / Foco', icon: Lightbulb },
+    reunion: { label: '📹 Reunión', icon: Video },
+    corona: { label: '👑 Corona', icon: Award },
+    info: { label: 'ℹ️ Información', icon: Info },
+  };
+
+  // Helpers matching dynamic channel structure of Discord
+  const getChannelIcon = (type?: string, iconKey?: string) => {
+    if (iconKey && ICON_GALLERY[iconKey]) {
+      return ICON_GALLERY[iconKey].icon;
+    }
+    switch (type) {
+      case 'chat': return MessageSquare;
+      case 'resources': return BookMarked;
+      case 'tools': return Wrench;
+      case 'discounts': return Tag;
+      case 'meetings': return Video;
+      case 'notices': return Info;
+      case 'hof': return Award;
+      case 'featured': return Flame;
+      case 'library': return Layers;
+      default: return MessageSquare;
+    }
+  };
+
+  const canUserAccessChannel = (chan: ChatChannel) => {
+    const userRole = user?.role || 'none';
+    
+    // Custom allowed roles configuration per Channel (Apartado)
+    if (chan.allowedRoles && chan.allowedRoles.length > 0) {
+      return chan.allowedRoles.includes(userRole as any);
+    }
+
+    const isSinRol = !user?.role || user?.role === 'none';
+    if (isSinRol) {
+      return chan.type === 'tools' || chan.id === 'pupil_panel';
+    }
+    if (chan.category === 'comunidad') {
+      const hasPayingAccess = !!(user?.subscription || user?.mensualidadActive || ['administrador', 'colaborador', 'moderador', 'veterano', 'old_school'].includes(user?.role || ''));
+      return hasPayingAccess;
+    }
+    return true;
+  };
+
+  const handleChannelClick = (chan: ChatChannel) => {
+    setActiveView(chan.id);
+  };
+
+  const handleOpenAddChannel = (category: 'alumno' | 'comunidad') => {
+    setEditingChannel(null);
+    setFormChannelName('');
+    setFormChannelCategory(category);
+    setFormChannelType('chat');
+    setFormChannelPinned(false);
+    setFormChannelOrder(channels.filter(c => c.category === category).length);
+    setFormChannelOnlyStaff(false);
+    setFormChannelIconKey('chat');
+    setFormChannelAllowedRoles([]);
+    setConfirmDeleteChannel(false);
+    setShowChannelModal(true);
+  };
+
+  const handleOpenEditChannel = (chan: ChatChannel, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingChannel(chan);
+    setFormChannelName(chan.name);
+    setFormChannelCategory(chan.category as any);
+    setFormChannelType(chan.type || 'chat');
+    setFormChannelPinned(!!chan.pinned);
+    setFormChannelOrder(chan.orderIndex !== undefined ? chan.orderIndex : 0);
+    setFormChannelOnlyStaff(!!chan.onlyStaffCanWrite);
+    setFormChannelIconKey(chan.iconKey || 'chat');
+    setFormChannelAllowedRoles(chan.allowedRoles || []);
+    setConfirmDeleteChannel(false);
+    setShowChannelModal(true);
+  };
+
+  const handleSaveChannelSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formChannelName.trim()) return;
+
+    const id = editingChannel ? editingChannel.id : 'chan_' + Math.random().toString(36).substr(2, 9);
+    const saved: ChatChannel = {
+      id,
+      name: formChannelName.trim(),
+      category: formChannelCategory,
+      type: formChannelType,
+      pinned: formChannelPinned,
+      orderIndex: Number(formChannelOrder),
+      onlyStaffCanWrite: formChannelOnlyStaff,
+      iconKey: formChannelIconKey,
+      allowedRoles: formChannelAllowedRoles,
+      createdAt: editingChannel ? editingChannel.createdAt : new Date().toISOString()
+    };
+
+    await DataAPI.saveChatChannel(saved);
+    setShowChannelModal(false);
+    setActiveView(id);
+    loadGlobalCollections();
+  };
+
+  const handleOpenEditText = (key: keyof DashboardTexts, currentValue: string) => {
+    setEditingTextKey(key);
+    setEditingTextValue(currentValue);
+  };
+
+  const handleSaveTextValue = async () => {
+    if (!editingTextKey) return;
+    const updated = {
+      ...dashboardTexts,
+      [editingTextKey]: editingTextValue
+    };
+    setDashboardTexts(updated);
+    await DataAPI.saveDashboardTexts(updated);
+    setEditingTextKey(null);
+    loadGlobalCollections();
+  };
+
+  const renderEditableText = (key: keyof DashboardTexts, textClass: string = '', wrapperElement: string = 'span') => {
+    const value = dashboardTexts?.[key] || DEFAULT_DASHBOARD_TEXTS[key] || '';
+    const isStaff = ['administrador', 'colaborador'].includes(user?.role || '');
+
+    if (!isStaff) {
+      if (wrapperElement === 'p') return <p className={textClass}>{value}</p>;
+      if (wrapperElement === 'h1') return <h1 className={textClass}>{value}</h1>;
+      if (wrapperElement === 'h2') return <h2 className={textClass}>{value}</h2>;
+      if (wrapperElement === 'h3') return <h3 className={textClass}>{value}</h3>;
+      return <span className={textClass}>{value}</span>;
+    }
+
+    const triggerEdit = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      handleOpenEditText(key, value);
+    };
+
+    return (
+      <span className={`group relative inline-block max-w-full ${textClass}`}>
+        <span>{value}</span>
+        <button
+          onClick={triggerEdit}
+          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 inline-flex items-center text-purple-400 bg-white/5 hover:bg-white/10 rounded-md cursor-pointer align-middle"
+          title="Editar Texto"
+        >
+          <Edit3 className="w-2.5 h-2.5" />
+        </button>
+      </span>
+    );
+  };
+
   // Simulated Seniority tenure (months registered with Titan)
   const [simulatedMonths, setSimulatedMonths] = useState<number>(0);
 
@@ -149,7 +361,7 @@ export default function App() {
   const loadGlobalCollections = async () => {
     if (!user) return;
     try {
-      const [m, n, t, d, h, f, hi, r, tt] = await Promise.all([
+      const [m, n, t, d, h, f, hi, r, tt, comp, chans, textConfig] = await Promise.all([
         DataAPI.getMeetings(),
         DataAPI.getNotices(),
         DataAPI.getTools(),
@@ -158,7 +370,10 @@ export default function App() {
         DataAPI.getStrategiesFeatured(),
         DataAPI.getStrategiesHistorical(),
         DataAPI.getResourceTopics(),
-        DataAPI.getToolTopics()
+        DataAPI.getToolTopics(),
+        DataAPI.getFundingCompanies(),
+        DataAPI.getChatChannels(),
+        DataAPI.getDashboardTexts()
       ]);
       setMeetings(m);
       setNotices(n);
@@ -169,10 +384,41 @@ export default function App() {
       setHistoricalStrategies(hi);
       setResourceTopics(r);
       setToolTopics(tt);
+      setCompanies(comp);
+      setChannels(chans);
+      if (textConfig) {
+        setDashboardTexts(textConfig);
+      }
     } catch (err) {
       console.error("Failed to load generic data", err);
     }
   };
+
+  useEffect(() => {
+    if (companies.length > 0) {
+      if (!dashCompany1Id) {
+        const val = localStorage.getItem('TM_dashCompany1Id') || companies[0].id;
+        setDashCompany1Id(val);
+        localStorage.setItem('TM_dashCompany1Id', val);
+      }
+      if (!dashCompany2Id) {
+        const val = localStorage.getItem('TM_dashCompany2Id') || companies[1]?.id || companies[0].id;
+        setDashCompany2Id(val);
+        localStorage.setItem('TM_dashCompany2Id', val);
+      }
+    }
+  }, [companies, dashCompany1Id, dashCompany2Id]);
+
+  // Subscribe to dynamic Discord-style channels list in real-time
+  useEffect(() => {
+    if (!user) return;
+    const unsub = DataAPI.subscribeChatChannels((list) => {
+      setChannels(list);
+    });
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [user]);
 
   // Subscribe and periodic refresh
   useEffect(() => {
@@ -193,6 +439,14 @@ export default function App() {
       clearInterval(intervalRef);
     };
   }, [user, activeView]);
+
+  // Reset scroll to top on active section changes except for chats/interactive streams (Requirement 5)
+  useEffect(() => {
+    const isInteractiveView = activeView === 'pupil_chat' || activeView === 'community_chat' || activeView.includes('chat') || activeView.includes('hilo') || activeView.includes('thread');
+    if (!isInteractiveView) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [activeView]);
 
   // Auth Operations
   const handleLogin = async (e: React.FormEvent) => {
@@ -286,7 +540,7 @@ export default function App() {
   const comunidadMeetings = meetings.filter(m => m.type === 'mensualidad');
 
   const isSinRol = !user?.role || user?.role === 'none';
-  const hasPayingAccess = ['administrador', 'colaborador'].includes(user?.role || '') || (['miembro', 'moderador'].includes(user?.role || '') && !!(user?.subscription || user?.mensualidadActive));
+  const hasPayingAccess = ['administrador', 'colaborador'].includes(user?.role || '') || (['miembro', 'veterano', 'old_school', 'moderador'].includes(user?.role || '') && !!(user?.subscription || user?.mensualidadActive));
 
   if (loading) {
     return (
@@ -536,6 +790,9 @@ export default function App() {
     );
   }
 
+  // Find current active channel definition
+  const activeChannel = channels.find(c => c.id === activeView);
+
   // --- RENDERING MAIN DASHBOARD WORKSPACE (Authenticated User) ---
   return (
     <div id="school-main-app-layout" className="min-h-screen bg-[#050505] text-slate-200 font-sans flex flex-col justify-between selection:bg-purple-500/30 selection:text-white">
@@ -664,150 +921,189 @@ export default function App() {
                 </button>
               </div>
             </div>
-
           </div>
         </header>
 
         {/* DOUBLE VIEWPORT MAIN CONTAINER */}
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 grid grid-cols-1 md:grid-cols-12 gap-8">
           
-                 {activeView === 'pupil_panel' && (
-            <aside className="lg:col-span-3 space-y-6">
+          <aside className="md:col-span-3 space-y-6">
             
-              {/* SECCIÓN A: ALUMNO NAV */}
-              <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
-                <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between ">
+            {/* SECCIÓN A: ALUMNO NAV */}
+            <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
+              <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-1">
                   <span className="text-[10px] text-slate-500 font-mono font-bold tracking-widest uppercase">Sección Alumno</span>
+                  {['administrador', 'colaborador'].includes(user?.role || '') && (
+                    <button
+                      onClick={() => handleOpenAddChannel('alumno')}
+                      className="p-1 text-slate-500 hover:text-purple-400 rounded hover:bg-white/5 transition-all cursor-pointer inline-flex items-center"
+                      title="Crear Apartado Alumno"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <span className={`text-[9px] py-0.5 px-1.5 rounded uppercase font-mono font-bold ${
+                  isSinRol 
+                  ? 'bg-[#121214] border border-white/5 text-slate-400' 
+                  : 'bg-purple-500/10 border border-purple-500/25 text-purple-400'
+                }`}>
+                  {isSinRol ? 'Bloqueado' : 'Abierto'}
+                </span>
+              </div>
+
+              <nav className="space-y-1 pt-2">
+                <button
+                  id="nav-pupil_panel"
+                  onClick={() => setActiveView('pupil_panel')}
+                  className={`w-full text-left py-2 px-3 rounded-xl text-xs font-semibold tracking-wide flex items-center justify-between transition-all cursor-pointer ${
+                    activeView === 'pupil_panel' 
+                    ? 'bg-white/5 text-white border border-white/5 shadow-md shadow-purple-500/5' 
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <BookOpen className="w-4 h-4 text-purple-400" />
+                    Panel principal
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                </button>
+
+                {channels.filter(c => c.category === 'alumno').map((item) => {
+                  const Icon = getChannelIcon(item.type, item.iconKey);
+                  const isSelected = activeView === item.id;
+                  const canAccess = canUserAccessChannel(item);
+                  if (!canAccess) return null;
+
+                  return (
+                    <button
+                      id={`nav-${item.id}`}
+                      key={item.id}
+                      onClick={() => handleChannelClick(item)}
+                      className={`w-full text-left py-2 px-3 rounded-xl text-xs font-semibold tracking-wide flex items-center justify-between transition-all cursor-pointer group ${
+                        isSelected 
+                        ? 'bg-white/5 text-white border border-white/5 shadow-md shadow-purple-500/5' 
+                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 min-w-0 flex-1">
+                        <Icon className="w-4 h-4 text-purple-400 shrink-0" />
+                        <span className="break-words">{formatChannelName(item)}</span>
+                        {item.pinned && <Pin className="w-2.5 h-2.5 text-yellow-500 shrink-0 rotate-45" />}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {['administrador', 'colaborador'].includes(user?.role || '') && (
+                          <span
+                            onClick={(e) => handleOpenEditChannel(item, e)}
+                            className="p-1 text-slate-600 hover:text-white rounded hover:bg-white/10 transition-all opacity-0 group-hover:opacity-100 shrink-0 cursor-pointer"
+                            title="Editar Canal"
+                          >
+                            <Settings className="w-3 h-3" />
+                          </span>
+                        )}
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                      </div>
+                    </button>
+                  );
+                })}
+
+                {isSinRol && (
+                  <button
+                    id="nav-join-tms"
+                    onClick={() => setActiveView('pupil_checkout')}
+                    className="w-full text-left py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-between transition-all cursor-pointer border border-[#f43f5e]/15 bg-[#f43f5e]/5 text-pink-405 hover:bg-[#f43f5e]/10 shadow-md shadow-pink-500/5 mt-1"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <Sparkles className="w-4 h-4 text-pink-400 animate-pulse" />
+                      <span>Únete a TMS</span>
+                    </span>
+                    <ArrowUpRight className="w-4 h-4 text-pink-400" />
+                  </button>
+                )}
+              </nav>
+            </div>
+
+            {/* SECCIÓN B: COMUNIDAD/MENSUALIDAD NAV */}
+            {!isSinRol && (
+              <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
+                <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-slate-550 font-mono font-bold tracking-widest uppercase">COMUNIDAD</span>
+                    {['administrador', 'colaborador'].includes(user?.role || '') && (
+                      <button
+                        onClick={() => handleOpenAddChannel('comunidad')}
+                        className="p-1 text-slate-500 hover:text-pink-400 rounded hover:bg-white/5 transition-all cursor-pointer inline-flex items-center"
+                        title="Crear Apartado Comunidad"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                   <span className={`text-[9px] py-0.5 px-1.5 rounded uppercase font-mono font-bold ${
-                    isSinRol 
-                    ? 'bg-[#121214] border border-white/5 text-slate-400' 
-                    : 'bg-purple-500/10 border border-purple-500/25 text-purple-400'
+                    hasPayingAccess 
+                    ? 'bg-pink-500/10 border border-pink-500/25 text-pink-400' 
+                    : 'bg-[#121214] border border-white/5 text-slate-400'
                   }`}>
-                    {isSinRol ? 'Bloqueado' : 'Abierto'}
+                    {hasPayingAccess ? 'VIP' : 'Bloqueado'}
                   </span>
                 </div>
-
+  
                 <nav className="space-y-1 pt-2">
-                  {[
-                    { view: 'pupil_panel', label: 'Panel principal', icon: BookOpen },
-                    { view: 'pupil_chat', label: 'Chat general', icon: MessageSquare, isChat: true },
-                    { view: 'pupil_resources', label: 'Recursos', icon: BookMarked },
-                    { view: 'pupil_tools', label: isSinRol ? 'Calculadoras' : 'Herramientas', icon: Wrench },
-                    { view: 'pupil_discounts', label: 'Descuentos y cupones', icon: Tag },
-                    { view: 'pupil_meetings', label: 'Sesiones Zoom/Meet', icon: Video, isMeeting: true },
-                    { view: 'pupil_notices', label: 'Avisos', icon: Info }
-                  ].filter(item => {
-                    // Sin rol can only access Panel and Calculadoras
-                    if (isSinRol) {
-                      return ['pupil_panel', 'pupil_tools'].includes(item.view);
-                    }
-                    // Alumno has no access to Chats or Reuniones (Meetings)
-                    if (user?.role === 'alumno') {
-                      if (item.isChat || item.isMeeting) return false;
-                    }
-                    // If subscription is false, hide Chats, Reuniones
-                    const isSubActive = !!(user?.subscription || user?.mensualidadActive);
-                    if (!isSubActive) {
-                      if (item.isChat || item.isMeeting) return false;
-                    }
-                    return true;
-                  }).map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        id={`nav-${item.view}`}
-                        key={item.view}
-                        onClick={() => setActiveView(item.view)}
-                        className={`w-full text-left py-2 px-3 rounded-xl text-xs font-semibold tracking-wide flex items-center justify-between transition-all cursor-pointer ${
-                          activeView === item.view 
-                          ? 'bg-white/5 text-white border border-white/5 shadow-md shadow-purple-500/5' 
-                          : 'text-slate-400 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2.5">
-                          <Icon className="w-4 h-4 text-purple-400" />
-                          {item.label}
-                        </span>
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
-                      </button>
-                    );
-                  })}
+                  {hasPayingAccess ? (
+                    channels.filter(c => c.category === 'comunidad').map((item) => {
+                      const Icon = getChannelIcon(item.type, item.iconKey);
+                      const isSelected = activeView === item.id;
+                      const canAccess = canUserAccessChannel(item);
+                      if (!canAccess) return null;
 
-                  {isSinRol && (
+                      return (
+                        <button
+                          id={`nav-${item.id}`}
+                          key={item.id}
+                          onClick={() => handleChannelClick(item)}
+                          className={`w-full text-left py-2 px-3 rounded-xl text-xs font-semibold tracking-wide flex items-center justify-between transition-all cursor-pointer group ${
+                            isSelected 
+                            ? 'bg-white/5 text-white border border-white/5 shadow-md shadow-pink-500/5' 
+                            : 'text-slate-400 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 min-w-0 flex-1">
+                            <Icon className="w-4 h-4 text-pink-400 shrink-0" />
+                            <span className="break-words">{formatChannelName(item)}</span>
+                            {item.pinned && <Pin className="w-2.5 h-2.5 text-yellow-500 shrink-0 rotate-45" />}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {['administrador', 'colaborador'].includes(user?.role || '') && (
+                              <span
+                                onClick={(e) => handleOpenEditChannel(item, e)}
+                                className="p-1 text-slate-600 hover:text-white rounded hover:bg-white/10 transition-all opacity-0 group-hover:opacity-100 shrink-0 cursor-pointer"
+                                title="Editar Canal"
+                              >
+                                <Settings className="w-3 h-3" />
+                              </span>
+                            )}
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                          </div>
+                        </button>
+                      );
+                    })
+                  ) : (
                     <button
-                      id="nav-join-tms"
-                      onClick={() => setActiveView('pupil_checkout')}
-                      className="w-full text-left py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-between transition-all cursor-pointer border border-[#f43f5e]/15 bg-[#f43f5e]/5 text-pink-405 hover:bg-[#f43f5e]/10 shadow-md shadow-pink-500/5 mt-1"
+                      id="nav-join-community-private"
+                      onClick={() => setActiveView('community_checkout')}
+                      className="w-full text-left py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-between transition-all cursor-pointer border border-[#f43f5e]/15 bg-[#f43f5e]/5 text-pink-405 hover:bg-[#f43f5e]/10 shadow-md shadow-pink-500/5"
                     >
                       <span className="flex items-center gap-2.5">
                         <Sparkles className="w-4 h-4 text-pink-400 animate-pulse" />
-                        <span>Únete a TMS</span>
+                        <span>Únete a la Comunidad Privada</span>
                       </span>
                       <ArrowUpRight className="w-4 h-4 text-pink-400" />
                     </button>
                   )}
                 </nav>
               </div>
-
-              {/* SECCIÓN B: COMUNIDAD/MENSUALIDAD NAV */}
-              {!isSinRol && (
-                <div className="bg-[#0A0A0B] border border-white/5 p-4 rounded-2xl space-y-2">
-                  <div className="px-2.5 pb-2 border-b border-white/5 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-550 font-mono font-bold tracking-widest uppercase">COMUNIDAD</span>
-                    <span className={`text-[9px] py-0.5 px-1.5 rounded uppercase font-mono font-bold ${
-                      hasPayingAccess 
-                      ? 'bg-pink-500/10 border border-pink-500/25 text-pink-400' 
-                      : 'bg-[#121214] border border-white/5 text-slate-400'
-                    }`}>
-                      {hasPayingAccess ? 'VIP' : 'Bloqueado'}
-                    </span>
-                  </div>
-    
-                  <nav className="space-y-1 pt-2">
-                    {hasPayingAccess ? (
-                      [
-                        { view: 'community_chat', label: 'Chat comunidad', icon: MessageSquare },
-                        { view: 'community_meetings', label: 'Sesiones comunidad', icon: Video },
-                        { view: 'community_hof', label: 'Salón de la fama', icon: Award },
-                        { view: 'community_featured', label: 'Estrategias destacadas', icon: Flame },
-                        { view: 'community_library', label: 'Históricas ganadoras', icon: Layers }
-                      ].map((item) => {
-                        const Icon = item.icon;
-                        return (
-                          <button
-                            id={`nav-${item.view}`}
-                            key={item.view}
-                            onClick={() => setActiveView(item.view)}
-                            className={`w-full text-left py-2 px-3 rounded-xl text-xs font-semibold tracking-wide flex items-center justify-between transition-all cursor-pointer ${
-                              activeView === item.view 
-                              ? 'bg-white/5 text-white border border-white/5 shadow-md shadow-pink-500/5' 
-                              : 'text-slate-400 hover:text-white hover:bg-white/5'
-                            }`}
-                          >
-                            <span className="flex items-center gap-2.5">
-                              <Icon className="w-4 h-4 text-pink-400" />
-                              {item.label}
-                            </span>
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <button
-                        id="nav-join-community-private"
-                        onClick={() => setActiveView('community_checkout')}
-                        className="w-full text-left py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-between transition-all cursor-pointer border border-[#f43f5e]/15 bg-[#f43f5e]/5 text-pink-400 hover:bg-[#f43f5e]/10 shadow-md shadow-pink-500/5"
-                      >
-                        <span className="flex items-center gap-2.5">
-                          <Sparkles className="w-4 h-4 text-pink-400 animate-pulse" />
-                          <span>Únete a la Comunidad Privada</span>
-                        </span>
-                        <ArrowUpRight className="w-4 h-4 text-pink-400" />
-                      </button>
-                    )}
-                  </nav>
-                </div>
-              )}
+            )}
 
             {/* SECCIÓN ADMINISTRADOR O COLABORADOR ACCESO */}
             {['administrador', 'colaborador'].includes(user.role || '') && (
@@ -827,35 +1123,12 @@ export default function App() {
               </div>
             )}
 
-            {/* Simulated Seniority Setting inside the aside wrapper */}
-            {hasPayingAccess && activeView === 'community_library' && (
-              <div className="p-4 bg-[#0A0A0B] border border-white/5 rounded-2xl text-xs space-y-2">
-                <span className="text-[10px] text-slate-500 font-mono font-bold uppercase tracking-wider block">📆 SIMULADOR DE ANTIGÜEDAD</span>
-                <p className="text-[10px] text-slate-400">Modifica el tiempo simulado que llevas en la academia para evaluar los desbloqueos automáticos:</p>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {[0, 1, 2, 3, 6].map((m) => (
-                    <button
-                      id={`sim-months-btn-${m}`}
-                      key={m}
-                      onClick={() => setSimulatedMonths(m)}
-                      className={`py-1.5 text-[10px] font-bold font-mono rounded-lg transition-all cursor-pointer ${
-                        simulatedMonths === m 
-                        ? 'bg-purple-600 text-white' 
-                        : 'bg-[#121214] border border-white/5 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {m}M
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+
 
           </aside>
-        )}
 
-          {/* RIGHT SIDE WORKSPACE VIEWPORT (9/12cols) */}
-          <main className={`${activeView === 'pupil_panel' ? 'lg:col-span-9' : 'lg:col-span-12'} space-y-8`}>
+          {/* RIGHT SIDE WORKSPACE VIEWPORT */}
+          <main className={`${['admin_view'].includes(activeView) ? 'md:col-span-12' : 'md:col-span-9'} space-y-8`}>
             
             {/* VIEW A.1: PANEL PRINCIPAL / DASHBOARD */}
             {activeView === 'pupil_panel' && isSinRol && (
@@ -889,55 +1162,55 @@ export default function App() {
                 <div className="bg-gradient-to-br from-[#121214] to-[#0A0A0B] border border-white/5 p-6 rounded-3xl relative overflow-hidden flex flex-col justify-between">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/10 blur-[80px] rounded-full -mr-20 -mt-20"></div>
                   
-                  <div className="space-y-3 relative z-10">
+                  <div className="space-y-3 relative z-10 text-left">
                     <div>
                       <span className="text-[10px] text-purple-400 font-mono font-bold uppercase tracking-widest block mb-1">Bienvenido de vuelta a</span>
                       <h1 className="text-3xl md:text-4xl font-black font-heading text-white tracking-tight uppercase leading-none">
-                        TITAN MASTER SCHOOL
+                        {renderEditableText('bienvenidoTitle', '', 'span')}
                       </h1>
                       <div className="text-xl md:text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-pink-400 tracking-tight mt-1">
                         {user.displayName}
                       </div>
                     </div>
-                    {['administrador', 'moderador', 'colaborador'].includes(user.role) && (
-                      <p className="text-slate-350 text-xs leading-relaxed max-w-xl font-sans mt-2">
-                        Tienes estatus académico de <strong>{user.role.toUpperCase()}</strong>. Este portal te permite consultar transmisiones, debatir en los canales comunitarios del chat general y descargar materiales de alto rendimiento.
-                      </p>
-                    )}
+                    <div className="text-slate-350 text-xs leading-relaxed max-w-xl font-sans mt-2">
+                      {renderEditableText('bienvenidoSubtitle', '', 'span')}
+                    </div>
                   </div>
                 </div>
 
                 {/* Dashboard Stats Overview Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 bg-[#0A0A0B] border border-white/5 rounded-2xl space-y-1 shadow-sm">
-                    <span className="text-[10px] text-slate-500 font-mono uppercase">Próximas Clases</span>
+                  <div className="p-4 bg-[#0A0A0B] border border-white/5 rounded-2xl space-y-1 shadow-sm text-left">
+                    <span className="text-[10px] text-slate-500 font-mono uppercase">{renderEditableText('proximasClasesTitle', '', 'span')}</span>
                     <div className="text-lg font-bold text-white font-sans">{alumnoMeetings.length} Sesiones Libres</div>
-                    <p className="text-[10px] text-slate-550">Programadas en Zoom / Google Meet para esta semana.</p>
+                    <p className="text-[10px] text-slate-550">{renderEditableText('proximasClasesDesc', '', 'span')}</p>
                   </div>
 
-                  <div className="p-4 bg-[#0A0A0B] border border-white/5 rounded-2xl space-y-1 shadow-sm">
-                    <span className="text-[10px] text-slate-500 font-mono uppercase">Estatus Suscripción</span>
+                  <div className="p-4 bg-[#0A0A0B] border border-white/5 rounded-2xl space-y-1 shadow-sm text-left">
+                    <span className="text-[10px] text-slate-500 font-mono uppercase">{renderEditableText('estatusSuscripcionTitle', '', 'span')}</span>
                     <div className={`text-lg font-bold font-sans ${user.mensualidadActive ? 'text-emerald-400' : 'text-pink-400'}`}>
-                      {user.mensualidadActive ? 'Mensualidad Activa' : 'Suscripción Básica'}
+                      {user.mensualidadActive ? 'Activa' : 'No activa'}
                     </div>
-                    <p className="text-[10px] text-slate-550 font-sans">Permite acceder a Comunidad y Estrategias Pro.</p>
+                    <p className="text-[10px] text-slate-550 font-sans">{renderEditableText('estatusSuscripcionDesc', '', 'span')}</p>
                   </div>
 
-                  <div className="p-4 bg-[#0A0A0B] border border-white/5 rounded-2xl space-y-1 shadow-sm">
-                    <span className="text-[10px] text-slate-500 font-mono uppercase">Canal de Chat Colectivo</span>
-                    <div className="text-lg font-bold text-purple-400 font-sans"># chat-alumnos</div>
-                    <p className="text-[10px] text-slate-550">Únete a debatir con los demás colegas del aula.</p>
+                  <div className="p-4 bg-[#0A0A0B] border border-white/5 rounded-2xl space-y-1 shadow-sm text-left">
+                    <span className="text-[10px] text-slate-500 font-mono uppercase">{renderEditableText('canalChatTitle', '', 'span')}</span>
+                    <div className="text-lg font-bold text-purple-400 font-sans">{renderEditableText('canalChatName', '', 'span')}</div>
+                    <p className="text-[10px] text-slate-550">{renderEditableText('canalChatDesc', '', 'span')}</p>
                   </div>
                 </div>
 
                 {/* Grid layout containing Recent Urgent alerts and Quick Lot size calculator */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 font-sans">
                   
                   {/* Urgent notices widget */}
-                  <div className="p-5 bg-pink-500/5 border border-pink-500/10 rounded-2xl space-y-3">
+                  <div className="p-5 bg-pink-500/5 border border-pink-500/10 rounded-2xl space-y-3 text-left">
                     <div className="flex items-center gap-1.5 pb-2 border-b border-pink-500/10">
                       <ShieldAlert className="w-4 h-4 text-pink-400 animate-pulse" />
-                      <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">Resumen de Avisos Urgentes</span>
+                      <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                        {renderEditableText('avisosUrgentesTitle', '', 'span')}
+                      </span>
                     </div>
 
                     <div className="space-y-3">
@@ -955,13 +1228,17 @@ export default function App() {
                   </div>
 
                   {/* Lot sizing widget shortcuts */}
-                  <div className="p-5 bg-[#0A0A0B] border border-white/5 rounded-2xl space-y-3 flex flex-col justify-between">
+                  <div className="p-5 bg-[#0A0A0B] border border-white/5 rounded-2xl space-y-3 flex flex-col justify-between text-left">
                     <div>
                       <div className="flex items-center gap-1.5 pb-2 border-b border-white/5">
                         <Wrench className="w-4 h-4 text-purple-400" />
-                        <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">Herramienta Rápida del Estudiante</span>
+                        <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                          {renderEditableText('herramientaRapidaTitle', '', 'span')}
+                        </span>
                       </div>
-                      <p className="text-xs text-slate-350 leading-relaxed mt-2 font-sans">Usa la calculadora integrada para planificar tu riesgo de lote según tu Stop Loss de pips.</p>
+                      <p className="text-xs text-slate-350 leading-relaxed mt-2 font-sans">
+                        {renderEditableText('herramientaRapidaDesc', '', 'span')}
+                      </p>
                     </div>
 
                     <button
@@ -976,582 +1253,365 @@ export default function App() {
                 </div>
 
                 {/* Partners & Funding Deals section */}
-                <div className="bg-[#0A0A0B] border border-white/5 p-5 rounded-2xl space-y-4">
-                  <div className="flex items-center gap-1.5 pb-2 border-b border-white/5">
+                <div className="bg-[#0A0A0B] border border-white/5 p-5 rounded-2xl space-y-4 font-sans">
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-white/5 text-left">
                     <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">Convenios de Fondeo & Partners Oficiales</span>
+                    <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                      {renderEditableText('conveniosTitle', '', 'span')}
+                    </span>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* APEX DEALS */}
-                    <div className="p-4 bg-zinc-950/50 border border-zinc-900 rounded-xl flex flex-col justify-between space-y-3 text-left">
-                      <div>
-                        <div className="flex justify-between items-start">
-                          <span className="text-xs font-black text-rose-450 font-sans tracking-wide">APEX TRADING FUNDING</span>
-                          <span className="text-[9px] bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full font-bold uppercase font-mono">CUPÓN: TMS</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 mt-1 font-sans leading-relaxed">
-                          La firma de fondeo de futuros líder. Obtén un descuento exclusivo del 80%-90% en tus cuentas de evaluación usando nuestro código promocional verificado escolar.
-                        </p>
+                    {companies.length === 0 ? (
+                      <div className="col-span-2 text-center py-6 text-zinc-500 text-xs font-sans">
+                        No hay partners de fondeo registrados por el momento.
                       </div>
-                      <div className="pt-2 flex items-center justify-between border-t border-white/5">
-                        <span className="text-[10px] text-zinc-500 font-mono">Código Promocional: <strong className="text-white selection:bg-pink-500 font-mono">TMS</strong></span>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText('TMS');
-                            alert('¡Código de descuento "TMS" copiado!');
-                          }}
-                          className="px-2.5 py-1 bg-rose-600/10 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-bold uppercase hover:bg-rose-550/20 cursor-pointer transition-all"
-                        >
-                          Copiar Código
-                        </button>
-                      </div>
-                    </div>
+                    ) : (
+                      [
+                        { 
+                          selectedId: dashCompany1Id, 
+                          setSelectedId: (val: string) => {
+                            setDashCompany1Id(val);
+                            localStorage.setItem('TM_dashCompany1Id', val);
+                          }, 
+                          label: 'Cupo Superior' 
+                        },
+                        { 
+                          selectedId: dashCompany2Id, 
+                          setSelectedId: (val: string) => {
+                            setDashCompany2Id(val);
+                            localStorage.setItem('TM_dashCompany2Id', val);
+                          }, 
+                          label: 'Cupo Inferior' 
+                        }
+                      ].map((slot, index) => {
+                        const c = companies.find(item => item.id === slot.selectedId) || companies[index] || companies[0];
+                        if (!c) return null;
+                        const isStaff = ['administrador', 'colaborador'].includes(user?.role || '');
 
-                    {/* EARN2TRADE DEALS */}
-                    <div className="p-4 bg-zinc-950/50 border border-zinc-900 rounded-xl flex flex-col justify-between space-y-3 text-left">
-                      <div>
-                        <div className="flex justify-between items-start">
-                          <span className="text-xs font-black text-amber-400 font-sans tracking-wide">EARN2TRADE</span>
-                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full font-bold uppercase font-mono">PROMO ACTIVA</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 mt-1 font-sans leading-relaxed">
-                          Accede al programa Trader Career Path o Gauntlet Mini de forma preferencial. Evaluaciones profesionales en futuros con reglas claras de consistencia y soporte premium.
-                        </p>
-                      </div>
-                      <div className="pt-2 border-t border-white/5">
-                        <a 
-                          href="https://www.earn2trade.com/es/non-us?a_pid=the_scalper" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="w-full py-1.5 px-3 bg-amber-500 hover:bg-amber-450 text-black rounded-lg text-[10px] font-bold uppercase text-center block transition-all hover:scale-[1.01]"
-                        >
-                          Click en el enlace ↗
-                        </a>
-                      </div>
-                    </div>
+                        return (
+                          <div id={`funding-company-card-${c.id}`} key={index} className="p-4 bg-zinc-950/50 border border-zinc-900 rounded-xl flex flex-col justify-between space-y-4 text-left relative group">
+                            <div>
+                              <div className="flex items-center gap-2.5 mb-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 font-bold font-mono text-xs shadow-[0_0_8px_rgba(239,68,68,0.1)] shrink-0">
+                                  {c.name ? c.name.charAt(0) : 'P'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-xs font-black text-rose-450 font-sans tracking-wide uppercase block truncate">{c.name}</span>
+                                  <span className="text-[8px] text-zinc-500 font-mono block">PARTNER OFICIAL</span>
+                                </div>
+                                <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase font-mono bg-rose-500/10 text-rose-400 shrink-0">
+                                  {c.coupon}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">
+                                {c.description}
+                              </p>
+                            </div>
+
+                            {/* Staff Dropdown Switcher */}
+                            {isStaff && (
+                              <div className="pt-2 border-t border-white/5 space-y-1">
+                                <span className="text-[9px] text-purple-400 font-mono uppercase block font-bold">Cambiar empresa ({slot.label}):</span>
+                                <select
+                                  value={slot.selectedId}
+                                  onChange={(e) => slot.setSelectedId(e.target.value)}
+                                  className="w-full bg-[#121214] border border-white/5 rounded-lg py-1 px-2 text-[10px] text-slate-300 focus:outline-none focus:border-purple-550"
+                                >
+                                  {companies.map(com => (
+                                    <option key={com.id} value={com.id}>{com.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            <div className="pt-2 flex items-center justify-between border-t border-white/5 gap-2">
+                              {c.code ? (
+                                <>
+                                  <span className="text-[10px] text-zinc-500 font-mono">Código: <strong className="text-white selection:bg-pink-400 font-mono">{c.code}</strong></span>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(c.code!);
+                                      alert(`¡Código de descuento "${c.code}" copiado!`);
+                                    }}
+                                    className="px-2.5 py-1 bg-rose-600/10 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-bold uppercase hover:bg-rose-550/20 cursor-pointer transition-all"
+                                  >
+                                    Copiar
+                                  </button>
+                                </>
+                              ) : (
+                                <a 
+                                  href={c.link || '#'} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="w-full py-1.5 px-3 bg-[#E5AA00] hover:bg-[#D59A00] text-black rounded-lg text-[10px] font-bold uppercase text-center block transition-all hover:scale-[1.01]"
+                                >
+                                  Web Oficial ↗
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
               </div>
             )}
 
-            {/* VIEW A.2: CHAT GENERAL ALUMNOS */}
-            {activeView === 'pupil_chat' && (
-              <div id="pupil-chat-view" className="space-y-4">
-                <ChatPanel chatType="alumno" currentUser={user} />
-              </div>
-            )}
+            {/* VIEW A.2: CHAT GENERAL / DYNAMIC CHAT */}
+            {(activeView === 'pupil_chat' || activeView === 'community_chat' || (activeChannel && activeChannel.type === 'chat')) && (() => {
+              const chan = activeChannel || channels.find(c => c.id === activeView);
+              const isDynamic = !!activeChannel && activeChannel.type === 'chat';
+              const titleKey = isDynamic ? `channel_title_${activeChannel.id}` : 'chatGeneralTitle';
+              const descKey = isDynamic ? `channel_desc_${activeChannel.id}` : 'chatGeneralSubtitle';
+              
+              if (isDynamic) {
+                if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = activeChannel.name;
+                if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'CANAL DE COMUNICACIÓN Y PLANIFICACIÓN TÉCNICA';
+              }
 
-            {/* VIEW A.3: RECURSOS - DYNAMIC BULLETIN FORUMS */}
+              return (
+                <div id="pupil-chat-view-container" className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                      {renderEditableText(titleKey as any, '', 'span')}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                      {renderEditableText(descKey as any, '', 'span')}
+                    </p>
+                  </div>
+                  {chan ? (
+                    <CategorizedPanel 
+                      parentChannel={chan} 
+                      currentUser={user} 
+                      onRefreshParentChannels={loadGlobalCollections} 
+                    />
+                  ) : (
+                    <ChatPanel 
+                      chatType={activeChannel?.category === 'comunidad' ? 'comunidad' : activeView === 'community_chat' ? 'comunidad' : 'alumno'} 
+                      currentUser={user} 
+                      channelId={activeChannel?.id} 
+                    />
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* VIEW A.3: RECURSOS / DYNAMIC RESOURCES */}
             {activeView === 'pupil_resources' && (
               <div id="pupil-resources-view" className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                    {renderEditableText('recursosTitle', '', 'span')}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                    {renderEditableText('recursosSubtitle', '', 'span')}
+                  </p>
+                </div>
                 <RecursosBoard 
                   currentUser={user} 
                   resourceTopics={resourceTopics} 
                   onRefresh={loadGlobalCollections} 
+                  channelId={activeChannel?.id}
+                  channelName={activeChannel?.name}
+                  onlyStaffCanWrite={!!activeChannel?.onlyStaffCanWrite}
                 />
               </div>
             )}
 
-            {/* VIEW A.4: HERRAMIENTAS - CALCULATORS & FOLDER TOPICS */}
-            {activeView === 'pupil_tools' && (
-              <div id="pupil-tools-view" className="space-y-6">
-                <HerramientasBoard 
-                  currentUser={user} 
-                  toolTopics={toolTopics} 
-                  onRefresh={loadGlobalCollections} 
-                />
-              </div>
-            )}
-
-            {/* VIEW A.5: DESCUENTOS ACADÉMICOS */}
-            {activeView === 'pupil_discounts' && (() => {
-              const discountTopics = [
-                {
-                  id: 'apex',
-                  category: 'fondeo',
-                  label: 'apex-trader-funding',
-                  title: 'Apex Trader Funding',
-                  author: 'Santi Scalper',
-                  role: 'administrador',
-                  benefit: '¡80% de DESCUENTO DIRECTO EN TODAS LAS CUENTAS!',
-                  description: 'Evaluación de futuros líder. Conexión de muy bajo delay con Tradovate o Rhythmic. Permite pasar cuentas micro-contratos y micro-lotes sin reglas absurdas de consistencia diaria y con retiros quincenales por Deel.',
-                  parameters: 'Código aplicable a planes de $25k, $50k, $100k y $150k.',
-                  code: 'TITAN80',
-                  link: 'https://apextraderfunding.com/?c=titan80',
-                  avatar: 'SS',
-                  avatarColor: 'from-purple-650 to-pink-650',
-                  date: 'Hoy a las 10:14 AM',
-                  comments: 'Este es el convenio más popular entre alumnos para operar el mercado de futuros de Chicago.',
-                  replies: [
-                    {
-                      userName: 'Carlos Trading',
-                      userRole: 'alumno',
-                      text: '¡Brutal! Súper recomendado, acabo de activar una cuenta de 50K por menos de $20.',
-                      time: 'Hoy a las 11:20 AM',
-                      avatar: 'CT',
-                      avatarColor: 'from-blue-500 to-indigo-500'
-                    },
-                    {
-                      userName: 'Sofía Valenzuela',
-                      userRole: 'miembro',
-                      text: 'El soporte técnico de Apex es rapidísimo. Acoplada con Tradovate va de locos.',
-                      time: 'Hoy a las 12:45 PM',
-                      avatar: 'SV',
-                      avatarColor: 'from-emerald-500 to-teal-500'
-                    }
-                  ]
-                },
-                {
-                  id: 'e2t',
-                  category: 'fondeo',
-                  label: 'earn2trade-carepath',
-                  title: 'Earn2Trade',
-                  author: 'Santi Scalper',
-                  role: 'administrador',
-                  benefit: '¡45% DE DESCUENTO EN TU EVALUACIÓN DE FUTUROS!',
-                  description: 'Evaluaciones ideales para convertirse en trader profesional formal regulado. Brinda reglas de arrastre sólidas a fin de día (End of Day Drawdown) y excelente material educativo institucional.',
-                  parameters: 'Válido para cuentas del plan Trader Career Path (TCP) y Mini Gauntlet.',
-                  code: 'TITANE2T45',
-                  link: 'https://www.earn2trade.com/?a=titan40',
-                  avatar: 'SS',
-                  avatarColor: 'from-purple-500 to-indigo-500',
-                  date: 'Ayer a las 09:30 AM',
-                  comments: 'Esta firma premia la paciencia. Súper recomendada si te cuesta controlar la sobre-operación.',
-                  replies: [
-                    {
-                      userName: 'Eduardo Trader',
-                      userRole: 'miembro',
-                      text: 'Por fin un descuento serio para Earn2Trade. Esta firma tiene las reglas más sanas del mercado.',
-                      time: 'Ayer a las 10:15 AM',
-                      avatar: 'ET',
-                      avatarColor: 'from-orange-500 to-rose-500'
-                    }
-                  ]
-                },
-                {
-                  id: 'fundednext',
-                  category: 'fondeo',
-                  label: 'fundednext-prop',
-                  title: 'FundedNext',
-                  author: 'Moderador Titan',
-                  role: 'moderador',
-                  benefit: '¡10% DE DESCUENTO DIRECTO + 15% DE BENEFICIO EN RETOS!',
-                  description: 'Excelente prop firm para operar Forex, CFD, metales e índices mundiales con spreads hiper-bajos. Sin límites de tiempo y opción de recibir pagos desde la misma fase de evaluación.',
-                  parameters: 'Aplicable a cuentas Stellar Challenges y de corte clásico.',
-                  code: 'TITANNEXT10',
-                  link: 'https://fundednext.com/?ref=titan',
-                  avatar: 'MT',
-                  avatarColor: 'from-teal-500 to-cyan-500',
-                  date: 'Hace 3 días',
-                  comments: 'Firma de fondeo confiable y de enorme crecimiento en nuestra comunidad.',
-                  replies: [
-                    {
-                      userName: 'Carlos Alumno',
-                      userRole: 'alumno',
-                      text: 'Excelente soporte y rapidez con el cashback. Ya compré una Stellar de 15K.',
-                      time: 'Hace 2 días',
-                      avatar: 'CA',
-                      avatarColor: 'from-violet-500 to-purple-500'
-                    }
-                  ]
-                },
-                {
-                  id: 'ftmo',
-                  category: 'fondeo',
-                  label: 'ftmo-institucional',
-                  title: 'FTMO Prop Firm',
-                  author: 'Santi Scalper',
-                  role: 'administrador',
-                  benefit: '5% REEMBOLSO DIRECTO + DESAFIOS ACADÉMICOS',
-                  description: 'La firma de fondeo más segura, duradera y consolidada a nivel global. Brinda condiciones reales de mercado en Forex y una suite de auditoría técnica que te ayudará a corregir tus peores hábitos de trading.',
-                  parameters: 'El reembolso se devuelve de forma directa en tu cartera titan.',
-                  code: 'TITANFTMO5',
-                  link: 'https://ftmo.com/es/?affiliate=titan5',
-                  avatar: 'SS',
-                  avatarColor: 'from-purple-650 to-pink-650',
-                  date: 'Hace 4 días',
-                  comments: 'La cuenta predilecta de todo trader consolidado debido a su transparencia institucional.',
-                  replies: [
-                    {
-                      userName: 'Sofía Valenzuela',
-                      userRole: 'miembro',
-                      text: 'FTMO es el rey. Los spreads durante noticias son los más estables, garantizado.',
-                      time: 'Hace 3 días',
-                      avatar: 'SV',
-                      avatarColor: 'from-emerald-500 to-teal-550'
-                    }
-                  ]
-                },
-                {
-                  id: 'tradingview',
-                  category: 'herramientas',
-                  label: 'tradingview-charts',
-                  title: 'TradingView Premium',
-                  author: 'Director Académico',
-                  role: 'colaborador',
-                  benefit: '¡30% DE DESCUENTO EN SUSCRICIONES ANUALES!',
-                  description: 'La plataforma que todos usamos en clase para nuestro análisis técnico fractal. Permite crear alertas inteligentes en la nube, indicadores volumétricos a medida y llevar un diario visual de análisis ordenado.',
-                  parameters: 'Obtienes 30 días de prueba gratuita y descuento de hasta 30% en planes anuales.',
-                  code: 'TITANVIEW30',
-                  link: 'https://tradingview.com/?aff=titan30',
-                  avatar: 'DA',
-                  avatarColor: 'from-amber-500 to-orange-500',
-                  date: 'Hoy a las 09:00 AM',
-                  comments: 'Herramienta obligatoria para nuestras mentorías y clases en vivo.',
-                  replies: [
-                    {
-                      userName: 'Carlos Alumno',
-                      userRole: 'alumno',
-                      text: '¡Por fin puedo añadir más de 3 indicadores sin que aparezcan anuncios!',
-                      time: 'Hoy a las 10:15 AM',
-                      avatar: 'CA',
-                      avatarColor: 'from-violet-500 to-purple-500'
-                    }
-                  ]
-                },
-                {
-                  id: 'metatrader5',
-                  category: 'herramientas',
-                  label: 'mt5-scripts',
-                  title: 'MetaTrader 5 Plugins',
-                  author: 'Moderador Titan',
-                  role: 'moderador',
-                  benefit: '¡INDICADORES DE VOLUMEN Y CALCULADOR DE RIESGO GRATIS!',
-                  description: 'Convenio académico con nuestros proveedores para automatizar perfiles de mercado y scripts de ejecución rápida mediante MetaTrader 5 sin pagar tarifas adicionales.',
-                  parameters: 'Compatible con sistema operativo Windows y simulador de Mac.',
-                  code: 'TITANMT5PRO',
-                  link: 'https://www.metatrader5.com/',
-                  avatar: 'MT',
-                  avatarColor: 'from-teal-500 to-cyan-500',
-                  date: 'Hace 1 semana',
-                  comments: 'Sincronizado de fábrica con la calculadora de lotes oficial de nuestra mesa.',
-                  replies: [
-                    {
-                      userName: 'Eduardo Trader',
-                      userRole: 'miembro',
-                      text: 'El script de cierre parcial en un click me ha salvado la vida tres veces en el Nasdaq hoy.',
-                      time: 'Hace 5 días',
-                      avatar: 'ET',
-                      avatarColor: 'from-orange-500 to-rose-500'
-                    }
-                  ]
-                },
-                {
-                  id: 'quanttower',
-                  category: 'herramientas',
-                  label: 'quanttower-orderflow',
-                  title: 'QuantTower OrderFlow',
-                  author: 'Santi Scalper',
-                  role: 'administrador',
-                  benefit: '¡LICENCIA PREMIUM DE ORDER FLOW CON DESCUENTO EXCLUSIVO!',
-                  description: 'Herramienta profesional para analizar el volumen consolidado de futuros. Ideal si estudias el mercado mediante Footprint, mapas de liquidez (Heatmap) y el libro de órdenes limitadas del CME.',
-                  parameters: 'Licencia gratuita utilizando la conexión de AMP Global.',
-                  code: 'TITANQUANT15',
-                  link: 'https://www.quanttower.com/',
-                  avatar: 'SS',
-                  avatarColor: 'from-purple-650 to-pink-650',
-                  date: 'Hace 2 semanas',
-                  comments: 'La mejor plataforma de Order Flow del mercado para analizar la absorción límite institucional.',
-                  replies: [
-                    {
-                      userName: 'Santi Scalper',
-                      userRole: 'administrador',
-                      text: 'Recuerden que daré una masterclass de visualizaciones avanzadas de QuantTower el próximo jueves 8.',
-                      time: 'Hace 1 semana',
-                      avatar: 'SS',
-                      avatarColor: 'from-purple-650 to-pink-650'
-                    }
-                  ]
-                }
-              ];
-
-              const currentTopic = discountTopics.find(t => t.id === activeDiscountTopic) || discountTopics[0];
-
-              const handleCopyCode = (id: string, code: string) => {
-                navigator.clipboard.writeText(code);
-                setCopiedCodeId(id);
-                setTimeout(() => setCopiedCodeId(null), 2000);
-              };
+            {/* DYNAMIC TEMPLATE FOR RESOURCES (FOR APARTADOS CREATED BY ADMIN) */}
+            {activeChannel && activeChannel.type === 'resources' && activeView !== 'pupil_resources' && (() => {
+              const titleKey = `channel_title_${activeChannel.id}`;
+              const descKey = `channel_desc_${activeChannel.id}`;
+              
+              if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = activeChannel.name;
+              if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'TEMAS DE SOPORTE Y DESCARGAS DEL APARTADO';
 
               return (
-                <div id="pupil-discounts-view" className="space-y-6">
+                <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-sans font-bold text-white">Canales de Descuentos y Convenios</h3>
-                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono tracking-wider text-left">CANALES ESTILO DISCORD CON ACCESO DIRECTOS DE ADMINISTRADOR</p>
+                    <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                      {renderEditableText(titleKey as any, '', 'span')}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                      {renderEditableText(descKey as any, '', 'span')}
+                    </p>
+                  </div>
+                  <CategorizedPanel 
+                    parentChannel={activeChannel} 
+                    currentUser={user} 
+                    onRefreshParentChannels={loadGlobalCollections} 
+                  />
+                </div>
+              );
+            })()}
+
+            {/* VIEW A.4: HERRAMIENTAS / DYNAMIC TOOLS */}
+            {(activeView === 'pupil_tools' || (activeChannel && activeChannel.type === 'tools')) && (() => {
+              const isDynamic = !!activeChannel && activeChannel.type === 'tools' && activeView !== 'pupil_tools';
+              const titleKey = isDynamic ? `channel_title_${activeChannel.id}` : 'herramientasTitle';
+              const descKey = isDynamic ? `channel_desc_${activeChannel.id}` : 'herramientasSubtitle';
+              
+              if (isDynamic) {
+                if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = activeChannel.name;
+                if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'HERRAMIENTAS, GUÍAS Y RECURSOS DEL DEBATE';
+              }
+
+              return (
+                <div id="pupil-tools-view" className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                      {renderEditableText(titleKey as any, '', 'span')}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                      {renderEditableText(descKey as any, '', 'span')}
+                    </p>
+                  </div>
+                  <HerramientasBoard 
+                    currentUser={user} 
+                    toolTopics={toolTopics} 
+                    onRefresh={loadGlobalCollections} 
+                    channelId={activeChannel?.id}
+                    channelName={activeChannel?.name}
+                    onlyStaffCanWrite={!!activeChannel?.onlyStaffCanWrite}
+                  />
+                </div>
+              );
+            })()}
+
+            {/* VIEW A.5: DESCUENTOS ACADÉMICOS */}
+            {(activeView === 'pupil_discounts' || (activeChannel && activeChannel.type === 'discounts')) && (() => {
+              const chan = activeChannel || channels.find(c => c.id === activeView);
+              if (chan) {
+                const isDynamic = !!activeChannel && activeChannel.id !== 'pupil_discounts';
+                const titleKey = isDynamic ? `channel_title_${chan.id}` : 'discountsTitle';
+                const descKey = isDynamic ? `channel_desc_${chan.id}` : 'discountsSubtitle';
+                
+                if (isDynamic) {
+                  if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = chan.name;
+                  if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'DESCUENTOS Y MATRICULAS EXCLUSIVAS CON CUPONES EXCLUSIVOS';
+                }
+
+                return (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                        {renderEditableText(titleKey as any, '', 'span')}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                        {renderEditableText(descKey as any, '', 'span')}
+                      </p>
+                    </div>
+                    <CategorizedPanel 
+                      parentChannel={chan} 
+                      currentUser={user} 
+                      onRefreshParentChannels={loadGlobalCollections} 
+                    />
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* VIEW A.6: SESIONES ZOOM/MEET */}
+            {(activeView === 'pupil_meetings' || (activeChannel && activeChannel.type === 'meetings' && activeChannel.category === 'alumno')) && (() => {
+              const isDynamic = !!activeChannel && activeChannel.id !== 'pupil_meetings';
+              const titleKey = isDynamic ? `channel_title_${activeChannel.id}` : 'sesionesTitle';
+              const descKey = isDynamic ? `channel_desc_${activeChannel.id}` : 'sesionesSubtitle';
+              
+              if (isDynamic) {
+                if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = activeChannel.name;
+                if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'REUNIONES Y SESIONES DE APRENDIZAJE ABIERTO';
+              }
+
+              return (
+                <div id="pupil-meetings-view" className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                      {renderEditableText(titleKey as any, '', 'span')}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                      {renderEditableText(descKey as any, '', 'span')}
+                    </p>
                   </div>
 
-                  {/* DISCORD INTERFACE CONTAINER */}
-                  <div className="bg-[#0A0A0B] border border-white/5 rounded-3xl overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[580px] shadow-2xl">
-                    
-                    {/* LEFT PANEL: CHANNELS LIST (3cols) */}
-                    <div className="md:col-span-4 lg:col-span-3 bg-[#050505] border-r border-white/5 flex flex-col justify-between">
-                      <div className="p-4 space-y-4">
-                        {/* Discord Server Title */}
-                        <div className="pb-3 border-b border-white/5">
-                          <span className="text-[11px] text-white font-bold tracking-wider uppercase flex items-center gap-1.5 font-mono">
-                            <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 animate-pulse"></span>
-                            Convenios Titan School
-                          </span>
-                        </div>
-
-                        {/* Category 1: Empresas de fondeo */}
-                        <div className="space-y-1 text-left">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-mono block pl-2.5">
-                            📊 Empresas de Fondeo
-                          </span>
-                          <div className="space-y-0.5">
-                            {discountTopics
-                              .filter(t => t.category === 'fondeo')
-                              .map(topic => (
-                                <button
-                                  id={`discount-topic-${topic.id}`}
-                                  key={topic.id}
-                                  onClick={() => setActiveDiscountTopic(topic.id)}
-                                  className={`w-full text-left py-1.5 px-3 rounded-lg text-xs font-medium flex items-center justify-between transition-all cursor-pointer ${
-                                    activeDiscountTopic === topic.id
-                                      ? 'bg-pink-550/15 text-pink-400 border border-pink-500/10 font-bold'
-                                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                                  }`}
-                                >
-                                  <span className="flex items-center gap-1.5 truncate">
-                                    <span className="text-slate-600 font-mono text-sm font-normal">#</span>
-                                    {topic.id}
-                                  </span>
-                                  {activeDiscountTopic === topic.id && (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-bounce"></span>
-                                  )}
-                                </button>
-                              ))}
-                          </div>
-                        </div>
-
-                        {/* Category 2: Herramientas */}
-                        <div className="space-y-1 text-left">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-mono block pl-2.5">
-                            🛠️ Herramientas
-                          </span>
-                          <div className="space-y-0.5">
-                            {discountTopics
-                              .filter(t => t.category === 'herramientas')
-                              .map(topic => (
-                                <button
-                                  id={`discount-topic-${topic.id}`}
-                                  key={topic.id}
-                                  onClick={() => setActiveDiscountTopic(topic.id)}
-                                  className={`w-full text-left py-1.5 px-3 rounded-lg text-xs font-medium flex items-center justify-between transition-all cursor-pointer ${
-                                    activeDiscountTopic === topic.id
-                                      ? 'bg-purple-550/15 text-purple-400 border border-purple-500/10 font-bold'
-                                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                                  }`}
-                                >
-                                  <span className="flex items-center gap-1.5 truncate">
-                                    <span className="text-slate-600 font-mono text-sm font-normal">#</span>
-                                    {topic.id}
-                                  </span>
-                                  {activeDiscountTopic === topic.id && (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-bounce"></span>
-                                  )}
-                                </button>
-                              ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Info Panel Footer */}
-                      <div className="p-3.5 bg-[#030303] border-t border-white/5 text-[9px] text-slate-500 font-mono text-center flex items-center justify-center gap-1.5 font-sans">
-                        <Shield className="w-3.5 h-3.5 text-pink-500" />
-                        <span>CANALES SOLO LECTURA</span>
-                      </div>
-                    </div>
-
-                    {/* RIGHT PANEL: ACTIVE TOPIC CHAT VIEW (9cols) */}
-                    <div className="md:col-span-8 lg:col-span-9 bg-[#0A0A0B] flex flex-col justify-between overflow-hidden">
-                      {/* Active Channel Header */}
-                      <div className="p-4 border-b border-white/5 bg-[#080809] flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-left">
-                          <span className="text-slate-500 text-lg font-mono">#</span>
-                          <span className="text-xs font-bold text-white uppercase tracking-wider">{currentTopic.label}</span>
-                          <span className="text-[10px] text-slate-500 hidden sm:inline-block border-l border-white/10 pl-2 font-sans">Información y descuento exclusivo de {currentTopic.title}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 font-mono flex items-center gap-2 uppercase">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                          <span>Autorizado</span>
-                        </div>
-                      </div>
-
-                      {/* Chat Messages Log Area */}
-                      <div className="p-6 flex-1 overflow-y-auto space-y-6 max-h-[480px]">
-                        
-                        {/* Splash Channel Welcome */}
-                        <div className="space-y-2 mb-6 text-left select-none">
-                          <div className="w-12 h-12 rounded-2xl bg-[#050505] border border-white/10 flex items-center justify-center text-slate-400 text-xl font-mono">
-                            #
-                          </div>
-                          <h4 className="text-base font-extrabold text-white">¡Te damos la bienvenida al canal #{currentTopic.id}!</h4>
-                          <p className="text-xs text-slate-400 leading-relaxed max-w-xl font-sans">Este es el inicio del hilo de convenios oficiales creado por el equipo administrativo y el director de la academia para #{currentTopic.title}.</p>
-                          <hr className="border-white/5 mt-4" />
-                        </div>
-
-                        {/* Pinned Admin Embed Message */}
-                        <div className="flex gap-4 items-start select-none text-left">
-                          <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${currentTopic.avatarColor} text-white font-mono text-xs font-bold flex items-center justify-center shadow-md`}>
-                            {currentTopic.avatar}
-                          </div>
-                          <div className="space-y-2 flex-1">
-                            {/* Author Row */}
-                            <div className="flex items-center gap-2">
-                              <span className={`text-xs font-bold ${
-                                currentTopic.role === 'administrador' ? 'text-red-400' : 'text-purple-400'
-                              }`}>{currentTopic.author}</span>
-                              <span className="text-[8px] uppercase tracking-widest font-mono bg-purple-500/10 border border-purple-500/25 text-purple-400 px-1 rounded-sm font-bold">STAFF</span>
-                              <span className="text-[9px] text-slate-500 font-mono">{currentTopic.date}</span>
-                            </div>
-
-                            {/* Text message */}
-                            <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                              Hola alumnos y miembros de Titan. Aquí les dejo el convenio oficial que hemos firmado con la firma de <strong>{currentTopic.title}</strong>. Tienen a su disposición un beneficio directo aplicando nuestro enlace de afiliado formal y el código de descuento activo escolar:
-                            </p>
-
-                            {/* Gorgeous Embed Block */}
-                            <div className={`border-l-4 ${
-                              currentTopic.category === 'fondeo' ? 'border-pink-500' : 'border-purple-500'
-                            } bg-[#050505]/60 hover:bg-[#050505]/80 transition-all rounded-r-2xl p-5 space-y-4 max-w-2xl mt-3 border border-y-white/5 border-r-white/5 shadow-lg`}>
-                              
-                              <div>
-                                <span className={`text-[10px] font-mono tracking-widest uppercase font-bold ${
-                                  currentTopic.category === 'fondeo' ? 'text-pink-400' : 'text-purple-400'
-                                }`}>💎 CONVENIO OFICIAL EXCLUSIVO</span>
-                                <h5 className="text-sm font-bold text-white mt-1 leading-tight">{currentTopic.benefit}</h5>
-                              </div>
-
-                              <div className="space-y-1.5 text-xs text-left">
-                                <p className="text-slate-300 font-sans text-[11px] leading-relaxed"><strong className="text-white font-sans">Descripción técnica:</strong> {currentTopic.description}</p>
-                                <p className="text-slate-400 font-sans text-[11px] leading-relaxed"><strong className="text-white font-sans">Parámetros operativos:</strong> {currentTopic.parameters}</p>
-                                <p className="text-slate-400 italic text-[11px] max-w-xl font-sans mt-2 border-t border-white/5 pt-1.5">"{currentTopic.comments}"</p>
-                              </div>
-
-                              {/* Copiar Code Section */}
-                              <div className="grid grid-cols-1 p-3 bg-[#0A0A0B] rounded-xl border border-white/5 gap-3 sm:grid-cols-2 items-center text-left">
-                                <div>
-                                  <span className="text-[9px] text-slate-500 font-mono block">CÓDIGO DE DESCUENTO DIRECTO:</span>
-                                  <span className="text-sm font-bold font-mono tracking-widest text-white selection:bg-pink-500">{currentTopic.code}</span>
-                                </div>
-                                <button
-                                  id={`btn-copy-code-${currentTopic.id}`}
-                                  onClick={() => handleCopyCode(currentTopic.id, currentTopic.code)}
-                                  className={`py-2 px-3.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.02] font-sans ${
-                                    copiedCodeId === currentTopic.id
-                                      ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-                                      : 'bg-white/5 hover:bg-white/10 border border-white/5 text-white'
-                                  }`}
-                                >
-                                  {copiedCodeId === currentTopic.id ? (
-                                    <>
-                                      <Check className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> ¡Copiado de una!
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="w-3.5 h-3.5 text-slate-400" /> Copiar Código
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-
-                              {/* Call to Action Anchor Link */}
-                              <a
-                                id={`link-cta-official-${currentTopic.id}`}
-                                href={currentTopic.link}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={`w-full py-2.5 px-4 block text-center rounded-xl text-xs font-bold tracking-wider uppercase transition-all shadow-md font-sans ${
-                                  currentTopic.category === 'fondeo'
-                                    ? 'bg-pink-650 hover:bg-pink-700 hover:scale-[1.01] text-white'
-                                    : 'bg-purple-650 hover:bg-purple-700 hover:scale-[1.01] text-white'
-                                }`}
-                              >
-                                IR A LA WEB OFICIAL DEL CONVENIO ↗
-                              </a>
-
+                  <div className="space-y-4 text-xs font-sans">
+                    {alumnoMeetings.length === 0 ? (
+                      <div className="p-10 bg-[#0A0A0B] border border-white/5 text-center rounded-2xl text-slate-500">No hay reuniones públicas registradas por el momento. Revisa con el director.</div>
+                    ) : (
+                      alumnoMeetings.map((m) => (
+                        <div id={`meet-card-${m.id}`} key={m.id} className="p-5 bg-[#0A0A0B] border border-white/5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div className="space-y-1.5">
+                            <span className="bg-purple-600/10 border border-purple-500/20 text-purple-400 text-[9px] px-2 py-0.5 rounded font-bold uppercase font-mono">ABIERTO ALUMNO</span>
+                            <h4 className="text-base font-bold text-white font-sans">{m.title}</h4>
+                            <div className="flex items-center gap-4 text-slate-500 text-[10px] font-mono">
+                              <span>📆 {m.date}</span>
+                              <span>⏰ {m.time} HORAS</span>
                             </div>
                           </div>
+
+                          <a
+                            id={`meet-link-btn-${m.id}`}
+                            href={m.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="w-full sm:w-auto py-2.5 px-5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-1 text-[11px] cursor-pointer"
+                          >
+                            INGRESAR A LA CLASE <ArrowUpRight className="w-4 h-4" />
+                          </a>
                         </div>
-
-                      </div>
-                    </div>
-
+                      ))
+                    )}
                   </div>
                 </div>
               );
             })()}
-                         {/* VIEW A.6: SESIONES ZOOM/MEET */}
-            {activeView === 'pupil_meetings' && (
-              <div id="pupil-meetings-view" className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-sans font-bold text-white">Sesiones de Transmisión del Aula</h3>
-                  <p className="text-xs text-slate-500 mt-1 uppercase font-mono">REUNIONES ACADÉMICAS ABIERTAS PARA ALUMNOS</p>
-                </div>
-
-                <div className="space-y-4 text-xs font-sans">
-                  {alumnoMeetings.length === 0 ? (
-                    <div className="p-10 bg-[#0A0A0B] border border-white/5 text-center rounded-2xl text-slate-500">No hay reuniones públicas registradas por el momento. Revisa con el director.</div>
-                  ) : (
-                    alumnoMeetings.map((m) => (
-                      <div id={`meet-card-${m.id}`} key={m.id} className="p-5 bg-[#0A0A0B] border border-white/5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        <div className="space-y-1.5">
-                          <span className="bg-purple-600/10 border border-purple-500/20 text-purple-400 text-[9px] px-2 py-0.5 rounded font-bold uppercase font-mono">ABIERTO ALUMNO</span>
-                          <h4 className="text-base font-bold text-white font-sans">{m.title}</h4>
-                          <div className="flex items-center gap-4 text-slate-500 text-[10px] font-mono">
-                            <span>📆 {m.date}</span>
-                            <span>⏰ {m.time} HORAS</span>
-                          </div>
-                        </div>
-
-                        <a
-                          id={`meet-link-btn-${m.id}`}
-                          href={m.link}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="w-full sm:w-auto py-2.5 px-5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-1 text-[11px] cursor-pointer"
-                        >
-                          INGRESAR A LA CLASE <ArrowUpRight className="w-4 h-4" />
-                        </a>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* VIEW A.7: AVISOS IMPORTANTES */}
-            {activeView === 'pupil_notices' && (
-              <div id="pupil-notices-view" className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-sans font-bold text-white">Diario de Avisos Importantes</h3>
-                  <p className="text-xs text-slate-500 mt-1 uppercase font-mono">MENSAJES OFICIALES DE NUESTROS PROFESORES</p>
-                </div>
+            {(activeView === 'pupil_notices' || (activeChannel && activeChannel.type === 'notices')) && (() => {
+              const isDynamic = !!activeChannel && activeChannel.id !== 'pupil_notices';
+              const titleKey = isDynamic ? `channel_title_${activeChannel.id}` : 'avisosTitle';
+              const descKey = isDynamic ? `channel_desc_${activeChannel.id}` : 'avisosSubtitle';
+              
+              if (isDynamic) {
+                if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = activeChannel.name;
+                if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'COMUNICADOS E INFORMACIÓN IMPORTANTE DEL CANAL';
+              }
 
-                <div className="space-y-4 text-xs font-sans">
-                  {notices.length === 0 ? (
-                    <div className="p-10 bg-[#0A0A0B] border border-white/5 text-center rounded-2xl text-slate-500">No se han emitido circulares o comunicados hoy.</div>
-                  ) : (
-                    notices.map((n) => (
-                      <div id={`notice-card-${n.id}`} key={n.id} className={`p-5 bg-[#0A0A0B] rounded-2xl border ${n.urgent ? 'border-pink-500/30' : 'border-white/5'} space-y-3`}>
-                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                          <span className="text-[10px] text-slate-500 font-mono">{new Date(n.createdAt).toLocaleDateString()}</span>
-                          {n.urgent && (
-                            <span className="bg-gradient-to-r from-red-600 to-pink-600 text-white text-[9px] font-extrabold font-mono px-2 py-0.5 rounded shadow">CIRCULAR URGENTE</span>
-                          )}
+              return (
+                <div id="pupil-notices-view" className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                      {renderEditableText(titleKey as any, '', 'span')}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                      {renderEditableText(descKey as any, '', 'span')}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4 text-xs font-sans">
+                    {notices.length === 0 ? (
+                      <div className="p-10 bg-[#0A0A0B] border border-white/5 text-center rounded-2xl text-slate-500">No se han emitido circulares o comunicados hoy.</div>
+                    ) : (
+                      notices.map((n) => (
+                        <div id={`notice-card-${n.id}`} key={n.id} className={`p-5 bg-[#0A0A0B] rounded-2xl border ${n.urgent ? 'border-pink-500/30' : 'border-white/5'} space-y-3`}>
+                          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                            <span className="text-[10px] text-slate-500 font-mono">{new Date(n.createdAt).toLocaleDateString()}</span>
+                            {n.urgent && (
+                              <span className="bg-gradient-to-r from-red-600 to-pink-600 text-white text-[9px] font-extrabold font-mono px-2 py-0.5 rounded shadow">CIRCULAR URGENTE</span>
+                            )}
+                          </div>
+                          <h4 className="text-base font-bold text-white font-sans">{n.title}</h4>
+                          <p className="text-xs text-slate-350 leading-relaxed break-words">{n.content}</p>
                         </div>
-                        <h4 className="text-base font-bold text-white font-sans">{n.title}</h4>
-                        <p className="text-xs text-slate-350 leading-relaxed break-words">{n.content}</p>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* VIEW A.0: PUPIL CHECKOUT WALL (ÚNETE A TMS) */}
             {activeView === 'pupil_checkout' && (
@@ -1651,20 +1711,28 @@ export default function App() {
               </div>
             )}
 
-            {/* VIEW B.1: CHAT COMUNIDAD VIP */}
-            {activeView === 'community_chat' && (
-              <div id="community-chat-view" className="space-y-4">
-                <ChatPanel chatType="comunidad" currentUser={user} />
-              </div>
-            )}
 
             {/* VIEW B.2: SESIONES VIP MENSUAL */}
-            {activeView === 'community_meetings' && (
-              <div id="community-meetings-view" className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-sans font-bold text-white">Sesiones VIP de Mensualidad</h3>
-                  <p className="text-xs text-slate-500 mt-1 uppercase font-mono">REUNIONES DE ALTO IMPACTO EXCLUSIVAS DE SOCIOS</p>
-                </div>
+            {(activeView === 'community_meetings' || (activeChannel && activeChannel.type === 'meetings' && activeChannel.category === 'comunidad')) && (() => {
+              const isDynamic = !!activeChannel && activeChannel.id !== 'community_meetings';
+              const titleKey = isDynamic ? `channel_title_${activeChannel.id}` : 'sesionesVIPTitle';
+              const descKey = isDynamic ? `channel_desc_${activeChannel.id}` : 'sesionesVIPSubtitle';
+              
+              if (isDynamic) {
+                if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = activeChannel.name;
+                if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'REUNIONES DE ALTO IMPACTO EXCLUSIVAS';
+              }
+
+              return (
+                <div id="community-meetings-view" className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                      {renderEditableText(titleKey as any, '', 'span')}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                      {renderEditableText(descKey as any, '', 'span')}
+                    </p>
+                  </div>
 
                 <div className="space-y-4 text-xs font-sans">
                   {comunidadMeetings.length === 0 ? (
@@ -1695,17 +1763,32 @@ export default function App() {
                   )}
                 </div>
               </div>
-            )}
+            );
+          })()}
 
             {/* VIEW B.3: SALÓN DE LA FAMA */}
-            {activeView === 'community_hof' && (
-              <div id="community-hof-view" className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-sans font-bold text-white">Salón de la Fama Titan Master School</h3>
-                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono">HISTORIAL DE TRADERS CON RESULTADOS REALES EXCEPCIONALES</p>
+            {(activeView === 'community_hof' || (activeChannel && activeChannel.type === 'hof')) && (() => {
+              const isDynamic = !!activeChannel && activeChannel.id !== 'community_hof';
+              const titleKey = isDynamic ? `channel_title_${activeChannel.id}` : 'hofTitle';
+              const descKey = isDynamic ? `channel_desc_${activeChannel.id}` : 'hofSubtitle';
+              
+              if (isDynamic) {
+                if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = activeChannel.name;
+                if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'ALUMNOS DESTACADOS POR SUS LOGROS ACADÉMICOS';
+              }
+
+              return (
+                <div id="community-hof-view" className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                        {renderEditableText(titleKey as any, '', 'span')}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 leading-relaxed font-sans">
+                        {renderEditableText(descKey as any, '', 'span')}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs font-sans">
                   {hallOfFame.length === 0 ? (
@@ -1732,7 +1815,7 @@ export default function App() {
                           <span className="relative z-10 font-sans">📉 Gráfico del Histórico de Fondos</span>
                         </div>
 
-                        {hof.prize && (
+                         {hof.prize && (
                           <div className="p-2.5 bg-yellow-500/5 border border-yellow-500/10 rounded-xl flex items-center gap-2 text-yellow-400 text-xs font-mono">
                             <Award className="w-4 h-4 flex-shrink-0" />
                             <span>Premio Entregado: <strong className="text-white">{hof.prize}</strong></span>
@@ -1743,14 +1826,30 @@ export default function App() {
                   )}
                 </div>
               </div>
-            )}
+            );
+          })()}
 
             {/* VIEW B.4: ESTRATEGIAS DESTACADAS */}
-            {activeView === 'community_featured' && (
-              <div id="community-featured-view" className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-sans font-bold text-white">Estrategias Destacadas Académicas</h3>
-                </div>
+            {(activeView === 'community_featured' || (activeChannel && activeChannel.type === 'featured')) && (() => {
+              const isDynamic = !!activeChannel && activeChannel.id !== 'community_featured';
+              const titleKey = isDynamic ? `channel_title_${activeChannel.id}` : 'featuredTitle';
+              const descKey = isDynamic ? `channel_desc_${activeChannel.id}` : 'featuredSubtitle';
+              
+              if (isDynamic) {
+                if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = activeChannel.name;
+                if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'SISTEMAS Y METODOLOGÍAS DE TRADING DE ALTA PROBABILIDAD';
+              }
+
+              return (
+                <div id="community-featured-view" className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-sans font-bold text-white uppercase tracking-tight">
+                      {renderEditableText(titleKey as any, '', 'span')}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                      {renderEditableText(descKey as any, '', 'span')}
+                    </p>
+                  </div>
 
                 <div className="space-y-6 text-xs font-sans">
                   {featuredStrategies.length === 0 ? (
@@ -1836,52 +1935,48 @@ export default function App() {
                   )}
                 </div>
               </div>
-            )}
+            );
+          })()}
 
             {/* VIEW B.5: BIBLIOTECA DE ESTRATEGIAS HISTÓRICAS */}
-            {activeView === 'community_library' && (
-              <div id="community-library-view" className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0A0A0B] border border-white/5 p-5 rounded-2xl">
-                  <div>
-                    <h3 className="text-lg font-sans font-bold text-white flex items-center gap-2"><Clock className="w-5 h-5 text-purple-400" /> Biblioteca de Estrategias Ganadoras Históricas</h3>
-                    <p className="text-xs text-slate-500 mt-1 uppercase font-mono">RECURSOS DESBLOQUEABLES SEGÚN TU ANTIGÜEDAD ACADÉMICA (MESES)</p>
-                  </div>
+            {(activeView === 'community_library' || (activeChannel && activeChannel.type === 'library')) && (() => {
+              const isDynamic = !!activeChannel && activeChannel.id !== 'community_library';
+              const titleKey = isDynamic ? `channel_title_${activeChannel.id}` : 'historicalTitle';
+              const descKey = isDynamic ? `channel_desc_${activeChannel.id}` : 'historicalSubtitle';
+              
+              if (isDynamic) {
+                if (!dashboardTexts[titleKey]) dashboardTexts[titleKey] = activeChannel.name;
+                if (!dashboardTexts[descKey]) dashboardTexts[descKey] = 'COLECCIÓN COMPLETA DE ANÁLISIS HISTÓRICOS Y APRENDIZAJE';
+              }
 
-                  <div className="px-3.5 py-1.5 bg-[#050505] border border-purple-500/20 rounded-xl text-xs font-mono text-center flex items-center gap-2 text-purple-400">
-                    <Clock className="w-4 h-4 animate-spin text-pink-400" />
-                    <span>Tu antigüedad simulada: <strong>{simulatedMonths} {simulatedMonths === 1 ? 'Mes' : 'Meses'}</strong></span>
+              return (
+                <div id="community-library-view" className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0A0A0B] border border-white/5 p-5 rounded-2xl">
+                    <div>
+                      <h3 className="text-lg font-sans font-bold text-white flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-purple-400 shrink-0" />
+                        {renderEditableText(titleKey as any, '', 'span')}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1 uppercase font-mono">
+                        {renderEditableText(descKey as any, '', 'span')}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
                 <div className="space-y-4 text-xs font-sans">
                   {historicalStrategies.length === 0 ? (
                     <div className="p-10 bg-[#0A0A0B] border border-white/5 text-center rounded-2xl text-slate-500 font-mono">La biblioteca se está cargando...</div>
                   ) : (
                     historicalStrategies.map((sh) => {
-                      const isBypassed = (user.manualUnlocks || []).includes(String(sh.requiredMonths));
-                      const isLocked = simulatedMonths < sh.requiredMonths && !isBypassed;
-                      
                       return (
                         <div
                           id={`hist-strat-card-${sh.id}`}
                           key={sh.id}
-                          className={`p-5 rounded-3xl border transition-all relative overflow-hidden ${
-                            isLocked 
-                            ? 'bg-[#0A0A0B]/20 border-white/5 opacity-60' 
-                            : 'bg-[#0A0A0B] border-white/5 hover:border-white/10'
-                          }`}
+                          className="p-5 rounded-3xl border border-white/5 bg-[#0A0A0B] hover:border-white/10 transition-all relative overflow-hidden"
                         >
-                          {isLocked && (
-                            <div className="absolute inset-0 bg-[#000]/65 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center p-4 space-y-2">
-                              <Lock className="w-6 h-6 text-pink-500 animate-bounce" />
-                              <span className="font-bold text-white font-sans text-sm">Biblioteca Cerrada</span>
-                              <p className="text-[11px] text-slate-400 max-w-sm">Esta estrategia está disponible a partir del mes {sh.requiredMonths} de permanencia con nosotros. (Simula {sh.requiredMonths} meses en la barra lateral o solicita al administrador un bypass para verla inmediatamente)</p>
-                            </div>
-                          )}
-
                           <div className="flex items-center justify-between border-b border-white/5 pb-3 flex-wrap gap-2">
                             <div>
-                              <span className="text-purple-400 text-[9px] font-bold font-mono tracking-wider uppercase block">ESTRATEGIA HISTÓRICA — MES {sh.requiredMonths}</span>
+                              <span className="text-purple-400 text-[9px] font-bold font-mono tracking-wider uppercase block">ESTRATEGIA HISTÓRICA</span>
                               <h4 className="text-base font-bold text-white block mt-0.5 font-sans">{sh.name}</h4>
                             </div>
                             <div className="text-right font-mono text-[10.5px]">
@@ -1903,7 +1998,8 @@ export default function App() {
                   )}
                 </div>
               </div>
-            )}
+            );
+          })()}
 
             {/* VIEW C.1: CENTRO DE ADMINISTRACIÓN */}
             {activeView === 'admin_view' && ['administrador', 'colaborador'].includes(user.role || '') && (
@@ -2029,6 +2125,281 @@ export default function App() {
             </div>
 
           </form>
+        </div>
+      )}
+
+      {/* CHANNEL EDITOR MODAL */}
+      {showChannelModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#121214] border border-white/5 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <h3 className="text-sm font-sans font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                <Settings className="w-4 h-4 text-purple-400" />
+                {editingChannel ? 'Editar Apartado/Canal' : 'Crear Apartado/Canal'}
+              </h3>
+              <button 
+                onClick={() => setShowChannelModal(false)}
+                className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg hover:bg-white/5 transition-all cursor-pointer inline-flex items-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveChannelSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 font-mono uppercase font-bold">Nombre del Apartado</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ej: Recursos, Psicologia, IA"
+                  value={formChannelName}
+                  onChange={(e) => setFormChannelName(e.target.value)}
+                  className="w-full bg-[#0A0A0B] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 font-sans"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 font-mono uppercase font-bold">Sección / Categoría</label>
+                  <select
+                    value={formChannelCategory}
+                    onChange={(e: any) => setFormChannelCategory(e.target.value)}
+                    className="w-full bg-[#0A0A0B] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                  >
+                    <option value="alumno">Sección Alumno</option>
+                    <option value="comunidad">Comunidad</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 font-mono uppercase font-bold">Tipo de Apartado</label>
+                  <select
+                    value={formChannelType}
+                    onChange={(e: any) => setFormChannelType(e.target.value)}
+                    className="w-full bg-[#0A0A0B] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                  >
+                    <option value="chat">💬 Tipo Chat</option>
+                    <option value="resources">📚 Tipo Recursos</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dynamic Icon Key Selection */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 font-mono uppercase font-bold">Icono del Apartado</label>
+                <select
+                  value={formChannelIconKey}
+                  onChange={(e) => setFormChannelIconKey(e.target.value)}
+                  className="w-full bg-[#0A0A0B] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 font-sans"
+                >
+                  {Object.entries(ICON_GALLERY).map(([key, item]) => (
+                    <option key={key} value={key}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 font-mono uppercase font-bold">Orden del Canal</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    max="100"
+                    value={formChannelOrder}
+                    onChange={(e) => setFormChannelOrder(Number(e.target.value))}
+                    className="w-full bg-[#0A0A0B] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2 pt-5">
+                  <input
+                    type="checkbox"
+                    id="chan-pinned-chk"
+                    checked={formChannelPinned}
+                    onChange={(e) => setFormChannelPinned(e.target.checked)}
+                    className="accent-purple-500 animate-none shrink-0"
+                  />
+                  <label htmlFor="chan-pinned-chk" className="text-[10px] text-slate-300 font-mono uppercase font-bold cursor-pointer flex items-center gap-1 select-none">
+                    <Pin className="w-3 h-3 text-yellow-500" /> Fijar arriba
+                  </label>
+                </div>
+              </div>
+
+              {/* Scoped Role Permissions Configurator */}
+              <div className="space-y-1.5 border-t border-white/5 pt-3">
+                <label className="text-[10px] text-zinc-400 font-mono uppercase font-bold text-left block">
+                  Permisos de Acceso (Ninguno seleccionado = Público por Defecto)
+                </label>
+                <div className="grid grid-cols-2 gap-2 bg-[#0A0A0B]/50 p-3 rounded-2xl border border-white/5 text-left text-xs text-zinc-300">
+                  {[
+                    { val: 'none', label: 'Sin Rol (Prospecto)' },
+                    { val: 'alumno', label: 'Alumno (Libre)' },
+                    { val: 'miembro', label: 'Miembro (Comunidad)' },
+                    { val: 'veterano', label: 'Veterano (Antiguo)' },
+                    { val: 'old_school', label: 'Old School (Comunidad)' },
+                    { val: 'moderador', label: 'Moderador (Chat)' },
+                    { val: 'colaborador', label: 'Colaborador' },
+                    { val: 'administrador', label: 'Administrador' }
+                  ].map((robj) => {
+                    const isChecked = formChannelAllowedRoles.includes(robj.val as any);
+                    return (
+                      <label key={robj.val} className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-white transition-colors select-none">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setFormChannelAllowedRoles(formChannelAllowedRoles.filter(r => r !== robj.val));
+                            } else {
+                              setFormChannelAllowedRoles([...formChannelAllowedRoles, robj.val as any]);
+                            }
+                          }}
+                          className="accent-purple-500 rounded shrink-0"
+                        />
+                        <span>{robj.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {(formChannelType === 'chat' || formChannelType === 'resources' || formChannelType === 'tools' || formChannelType === 'discounts') && (
+                <div className="flex items-center space-x-2 py-1">
+                  <input
+                    type="checkbox"
+                    id="chan-onlystaff-chk"
+                    checked={formChannelOnlyStaff}
+                    onChange={(e) => setFormChannelOnlyStaff(e.target.checked)}
+                    className="accent-purple-500"
+                  />
+                  <label htmlFor="chan-onlystaff-chk" className="text-[10px] text-slate-450 cursor-pointer font-sans leading-tight select-none">
+                    🔒 Solo el Staff (Admins/Colaboradores) puede publicar contenido (Modo Solo Lectura para alumnos)
+                  </label>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between border-t border-white/5 pt-4 gap-3">
+                {editingChannel ? (
+                  !confirmDeleteChannel ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteChannel(true)}
+                      className="py-2.5 px-4 bg-rose-950/45 hover:bg-[#881337] text-rose-300 border border-rose-900/40 font-semibold rounded-xl text-xs transition-all cursor-pointer font-sans"
+                    >
+                      Eliminar
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5 bg-[#1B0C0E] border border-rose-950 p-1.5 rounded-xl">
+                      <span className="text-[10px] text-rose-400 font-mono font-bold uppercase tracking-tight px-1.5">¿Borrar?</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await DataAPI.deleteChatChannel(editingChannel.id);
+                          setShowChannelModal(false);
+                          setActiveView('pupil_panel');
+                          loadGlobalCollections();
+                        }}
+                        className="py-1.5 px-2.5 bg-red-650 hover:bg-red-600 text-white font-bold rounded-lg text-[10px] uppercase font-sans cursor-pointer transition-all shrink-0"
+                      >
+                        Sí, Borrar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteChannel(false)}
+                        className="py-1.5 px-2 bg-white/5 hover:bg-white/10 text-slate-350 rounded-lg text-[10px] font-semibold font-sans cursor-pointer transition-all"
+                      >
+                        No
+                      </button>
+                    </div>
+                  )
+                ) : <div />}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowChannelModal(false)}
+                    className="py-2.5 px-4 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold rounded-xl text-xs transition-all cursor-pointer font-sans"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="py-2.5 px-5 bg-gradient-to-r from-purple-650 to-pink-650 hover:from-purple-600 hover:to-pink-600 text-white font-bold rounded-xl text-xs shadow-lg shadow-purple-500/10 transition-all cursor-pointer font-sans"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingTextKey && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <div className="bg-[#121214] border border-white/5 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <h3 className="text-sm font-sans font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-purple-400" />
+                Editar Parámetro de Texto
+              </h3>
+              <button 
+                onClick={() => setEditingTextKey(null)}
+                className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg hover:bg-white/5 transition-all cursor-pointer inline-flex items-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <span className="text-[9px] text-purple-400 font-mono uppercase block font-bold">Clave del Campo</span>
+                <span className="text-xs text-white/50 font-mono block bg-zinc-950 px-3 py-1.5 rounded-lg border border-white/5">
+                  {editingTextKey}
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 font-mono uppercase font-bold">Valor de Contenido</label>
+                {editingTextValue.length > 50 ? (
+                  <textarea
+                    rows={4}
+                    value={editingTextValue}
+                    onChange={(e) => setEditingTextValue(e.target.value)}
+                    className="w-full bg-[#0A0A0B] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-secondary focus:outline-none focus:border-purple-500 font-sans leading-relaxed"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    required
+                    value={editingTextValue}
+                    onChange={(e) => setEditingTextValue(e.target.value)}
+                    className="w-full bg-[#0A0A0B] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 font-sans"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-4 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => setEditingTextKey(null)}
+                className="py-2.5 px-4 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold rounded-xl text-xs transition-all cursor-pointer font-sans"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTextValue}
+                className="py-2.5 px-5 bg-gradient-to-r from-purple-650 to-pink-650 hover:from-purple-600 hover:to-pink-600 text-white font-bold rounded-xl text-xs shadow-lg shadow-purple-500/10 transition-all cursor-pointer font-sans"
+              >
+                Guardar Cambios
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

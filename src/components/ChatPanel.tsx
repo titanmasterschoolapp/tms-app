@@ -25,13 +25,15 @@ import {
 } from 'lucide-react';
 import { ChatMessage, ChatChannel, UserProfile, UserRole } from '../types';
 import { DataAPI } from '../lib/db';
+import { formatChannelName } from '../App';
 
 interface ChatPanelProps {
   chatType: 'alumno' | 'comunidad';
   currentUser: UserProfile;
+  channelId?: string;
 }
 
-export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
+export default function ChatPanel({ chatType, currentUser, channelId }: ChatPanelProps) {
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -44,7 +46,14 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
   const [threadText, setThreadText] = useState('');
 
   // Active channel id
-  const [activeChannelId, setActiveChannelId] = useState<string>('general');
+  const [activeChannelId, setActiveChannelId] = useState<string>('pupil_chat');
+
+  // Synchronize active channel from props
+  useEffect(() => {
+    if (channelId) {
+      setActiveChannelId(channelId);
+    }
+  }, [channelId]);
 
   // Channel admin states
   const [showChannelModal, setShowChannelModal] = useState(false);
@@ -114,19 +123,17 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
 
   // Set default active channel depending on mode
   useEffect(() => {
+    if (channelId) return;
     if (channels.length > 0) {
-      const generalChans = channels.filter(c => c.category === 'Chat·General');
-      const comunidadChans = channels.filter(c => c.category === 'Comunidad');
-
       if (chatType === 'comunidad') {
-        const found = comunidadChans.find(c => c.id === 'comunidad-vip' || c.id === 'mesa-redonda-vip') || comunidadChans[0] || channels[0];
+        const found = channels.find(c => c.id === 'community_chat' || c.category === 'comunidad') || channels[0];
         setActiveChannelId(found.id);
       } else {
-        const found = generalChans.find(c => c.id === 'general') || generalChans[0] || channels[0];
+        const found = channels.find(c => c.id === 'pupil_chat' || c.category === 'alumno') || channels[0];
         setActiveChannelId(found.id);
       }
     }
-  }, [chatType, channels.length]);
+  }, [chatType, channels.length, channelId]);
 
   // Reset thread panel and message errors when channel switches
   useEffect(() => {
@@ -199,15 +206,14 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
   };
 
   // Helper helper to evaluate if a user can read a channel category
-  const getHasReadAccess = (category: 'Chat·General' | 'Comunidad' | 'Claustro', role: UserRole): boolean => {
-    if (category === 'Claustro') {
+  const getHasReadAccess = (category: string, role: UserRole): boolean => {
+    if (category === 'Claustro' || category === 'claustro') {
       return ['moderador', 'colaborador', 'administrador'].includes(role);
     }
-    if (category === 'Comunidad') {
-      return ['miembro', 'moderador', 'colaborador', 'administrador'].includes(role);
+    if (category === 'Comunidad' || category === 'comunidad') {
+      return ['miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(role);
     }
-    // 'Chat·General' is visible to all academic roles, but not to 'none' / sin-rol
-    return ['alumno', 'miembro', 'moderador', 'colaborador', 'administrador'].includes(role);
+    return ['alumno', 'miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(role);
   };
 
   // Convert name to slug format (lowercase, replace spaces/unsupported chars with hyphens)
@@ -268,15 +274,6 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
 
   // Handler for deleting channel
   const handleDeleteChannel = async (channelId: string) => {
-    if (channelId === 'general' || channelId === 'anuncios-academia') {
-      setAlertModal({
-        show: true,
-        title: "Operación no permitida",
-        message: "Este es un canal predefinido del sistema y no se puede eliminar."
-      });
-      return;
-    }
-
     setConfirmModal({
       show: true,
       title: "Eliminar canal técnico",
@@ -451,6 +448,8 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
       case 'colaborador': return 'text-blue-400';
       case 'moderador': return 'text-purple-400';
       case 'miembro': return 'text-pink-400';
+      case 'veterano': return 'text-pink-400 font-semibold';
+      case 'old_school': return 'text-orange-400 font-bold';
       default: return 'text-indigo-200';
     }
   };
@@ -465,6 +464,10 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
         return <span className="bg-purple-500/10 border border-purple-500/30 text-purple-455 text-[8px] px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider flex items-center gap-1"><Shield className="w-2.5 h-2.5" /> Mod</span>;
       case 'miembro':
         return <span className="bg-pink-500/10 border border-pink-500/30 text-pink-455 text-[8px] px-1.5 py-0.5 rounded font-mono uppercase tracking-widest text-[8px] font-black">Miembro</span>;
+      case 'veterano':
+        return <span className="bg-gradient-to-r from-pink-500/15 via-rose-500/15 to-purple-500/15 border border-pink-500/35 text-pink-300 text-[8px] px-1.5 py-0.5 rounded font-mono uppercase tracking-widest text-[8px] font-black">Veterano</span>;
+      case 'old_school':
+        return <span className="bg-gradient-to-r from-orange-500/15 via-red-500/15 to-amber-500/15 border border-orange-500/35 text-orange-400 text-[8px] px-1.5 py-0.5 rounded font-mono uppercase tracking-widest text-[8px] font-black">Old School</span>;
       default:
         return <span className="bg-zinc-900 border border-zinc-800 text-zinc-400 text-[8px] px-1.5 py-0.5 rounded font-mono uppercase tracking-wider font-bold">Alumno</span>;
     }
@@ -486,9 +489,9 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
   };
 
   const activeChannel = channels.find(ch => ch.id === activeChannelId) || {
-    id: 'general',
-    name: 'general',
-    category: 'Chat·General' as const,
+    id: 'pupil_chat',
+    name: 'Chat general',
+    category: 'alumno' as any,
     onlyStaffCanWrite: false,
     createdAt: ''
   };
@@ -570,7 +573,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
                             #
                           </span>
                           <span className="text-[11.5px] truncate font-sans tracking-tight">
-                            {ch.name}
+                            {formatChannelName(ch)}
                           </span>
                         </div>
 
@@ -595,7 +598,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
                               >
                                 <Edit className="w-2.5 h-2.5" />
                               </button>
-                              {ch.id !== 'general' && ch.id !== 'anuncios-academia' && (
+                              {true && (
                                 <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); handleDeleteChannel(ch.id); }}
@@ -677,17 +680,22 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
     );
   };
 
+  const hasGlobalSidebar = !!channelId;
+
   return (
-    <div id="clean-chat-component" className="grid grid-cols-1 md:grid-cols-4 bg-[#0A0A0B] border border-white/5 rounded-3xl overflow-hidden h-[630px] shadow-2xl relative font-sans">
+    <div 
+      id="clean-chat-component" 
+      className={`${hasGlobalSidebar ? 'flex w-full' : 'grid grid-cols-1 md:grid-cols-4'} bg-[#0A0A0B] border border-white/5 rounded-3xl overflow-hidden h-[630px] shadow-2xl relative font-sans`}
+    >
       
       {/* 1. Left Channels Sidebar */}
-      {renderLeftSidebar()}
+      {!hasGlobalSidebar && renderLeftSidebar()}
 
       {/* 2. Central Chats Stream */}
-      <div className={`col-span-1 md:col-span-3 flex flex-col h-full bg-[#050505] relative ${activeThreadId ? 'lg:col-span-2' : ''}`}>
+      <div className={`${hasGlobalSidebar ? 'flex-1' : 'col-span-1 md:col-span-3'} flex flex-col h-full bg-[#050505] relative ${activeThreadId ? 'lg:col-span-2' : ''}`}>
         
         {/* Mobile top tabs */}
-        {renderMobileTabs()}
+        {!hasGlobalSidebar && renderMobileTabs()}
 
         {/* Channel Active Header info */}
         <div className="p-4 border-b border-white/5 bg-[#0A0A0B] flex items-center justify-between">
@@ -697,7 +705,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
             </span>
             <div className="min-w-0">
               <span className="font-sans font-black text-xs text-white uppercase tracking-wider block">
-                {activeChannel.name}
+                {formatChannelName(activeChannel)}
               </span>
               <p className="text-[9.5px] text-slate-500 font-medium tracking-tight truncate hidden sm:block">
                 Canal {activeChannel.category === 'Chat·General' ? 'público para todos los alumnos' : activeChannel.category === 'Comunidad' ? 'exclusivo para miembros de la comunidad' : 'privado para el Claustro Técnico'}  •  Por {activeChannel.onlyStaffCanWrite ? 'solo lectura' : 'sala abierta para debate'}
@@ -727,7 +735,7 @@ export default function ChatPanel({ chatType, currentUser }: ChatPanelProps) {
                   Acceso Especial Comunidad
                 </span>
                 <h3 className="text-sm font-bold font-sans text-white uppercase tracking-tight">
-                  Canal Reservado: #{activeChannel.name}
+                  Canal Reservado: {formatChannelName(activeChannel)}
                 </h3>
                 <p className="text-[11px] text-slate-400 leading-relaxed font-sans mt-2">
                   Esta sala de debates técnicos avanzados está reservada de manera exclusiva para <strong>Miembros de la comunidad</strong> (Membresía Hotmart) o integrantes del claustro de Titan Master School.

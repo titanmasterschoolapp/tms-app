@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'alumno' | 'miembro' | 'moderador' | 'colaborador' | 'administrador' | 'none';
+export type UserRole = 'alumno' | 'miembro' | 'veterano' | 'old_school' | 'moderador' | 'colaborador' | 'administrador' | 'none';
 
 export interface UserProfile {
   uid: string;
@@ -43,6 +43,9 @@ export interface ChatMessage {
   channelId?: string; // Links to dynamic chat channel
   status: 'active' | 'hidden' | 'pending_review';
   imageUrl?: string; // Optional image upload link
+  documentUrl?: string; // Optional document link
+  documentName?: string; // Optional document name
+  reactions?: { [emoji: string]: string[] }; // { "🔥": ["uid1"] }
   createdAt: string;
   replies?: ChatReply[];
 }
@@ -50,9 +53,14 @@ export interface ChatMessage {
 export interface ChatChannel {
   id: string;
   name: string;
-  category: 'Chat·General' | 'Comunidad' | 'Claustro';
+  category: string; // Dynamic category/apartado: 'alumno' | 'comunidad' | 'Claustro' | 'Chat·General' etc.
   onlyStaffCanWrite: boolean;
   createdAt: string;
+  type?: 'chat' | 'resources' | 'tools' | 'discounts' | 'meetings' | 'notices' | 'hof' | 'featured' | 'library';
+  orderIndex?: number;
+  pinned?: boolean;
+  iconKey?: string; // Selected Lucide icon key matching ICON_GALLERY
+  allowedRoles?: UserRole[]; // Custom role permissions
 }
 
 export interface ResourceReply {
@@ -199,3 +207,98 @@ export interface CustomCategory {
   name: string;
   createdAt: string;
 }
+
+export interface CategorizedCategory {
+  id: string;
+  channelId: string; // Parent ChatChannel's ID (e.g. 'pupil_chat', 'pupil_discounts', or custom)
+  name: string;
+  orderIndex: number;
+  createdAt: string;
+  allowedRoles?: UserRole[]; // Custom role permissions
+}
+
+export interface CategorizedSubChannel {
+  id: string;
+  channelId: string; // Parent ChatChannel's ID
+  categoryId: string; // The parent CategorizedCategory's ID
+  name: string; // e.g. '# general', '# apex', etc.
+  orderIndex: number;
+  readOnly?: boolean; // Toggles read-only mode where only staff can write
+  createdAt: string;
+  allowedRoles?: UserRole[]; // Custom role permissions
+}
+
+export interface CategorizedCoupon {
+  id: string;
+  channelId: string;
+  subChannelId: string;
+  name: string;
+  coupon: string;
+  description: string;
+  code?: string;
+  link?: string;
+  active: boolean;
+  orderIndex: number;
+  createdAt: string;
+  pinned?: boolean;
+}
+
+export interface FundingCompany {
+  id: string;
+  name: string;
+  coupon: string;
+  description: string;
+  code?: string;
+  link?: string;
+  active: boolean;
+  featured: boolean;
+  orderIndex: number;
+  createdAt: string;
+  subChannelId?: string;
+  pinned?: boolean;
+}
+
+export interface DashboardTexts {
+  bienvenidoTitle: string;
+  bienvenidoSubtitle: string;
+  proximasClasesTitle: string;
+  proximasClasesDesc: string;
+  estatusSuscripcionTitle: string;
+  estatusSuscripcionDesc: string;
+  canalChatTitle: string;
+  canalChatName: string;
+  canalChatDesc: string;
+  avisosUrgentesTitle: string;
+  herramientaRapidaTitle: string;
+  herramientaRapidaDesc: string;
+  conveniosTitle: string;
+  recursosTitleOverride: string;
+  herramientasTitleOverride: string;
+  herramientasSubtitleOverride: string;
+  
+  // New Editable Fields requested by user:
+  avisosTitle?: string;
+  avisosSubtitle?: string;
+  sesionesTitle?: string;
+  sesionesSubtitle?: string;
+  recursosTitle?: string;
+  recursosSubtitle?: string;
+  herramientasTitle?: string;
+  herramientasSubtitle?: string;
+  discountsTitle?: string;
+  discountsSubtitle?: string;
+  chatGeneralTitle?: string;
+  chatGeneralSubtitle?: string;
+  comunidadTitle?: string;
+  comunidadSubtitle?: string;
+  hofTitle?: string;
+  hofSubtitle?: string;
+  featuredTitle?: string;
+  featuredSubtitle?: string;
+  historicalTitle?: string;
+  historicalSubtitle?: string;
+
+  // Index signature for dynamic dynamic created admin channels
+  [key: string]: any;
+}
+

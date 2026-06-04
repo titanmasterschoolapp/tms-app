@@ -18,9 +18,19 @@ interface HerramientasBoardProps {
   currentUser: UserProfile;
   toolTopics: ToolTopic[];
   onRefresh: () => void;
+  channelId?: string;
+  channelName?: string;
+  onlyStaffCanWrite?: boolean;
 }
 
-export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }: HerramientasBoardProps) {
+export default function HerramientasBoard({ 
+  currentUser, 
+  toolTopics, 
+  onRefresh, 
+  channelId,
+  channelName,
+  onlyStaffCanWrite
+}: HerramientasBoardProps) {
   const isSinRol = !currentUser.role || currentUser.role === 'none';
   const isStaff = ['administrador', 'colaborador', 'moderador'].includes(currentUser.role || '');
   
@@ -72,8 +82,8 @@ export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }
     // Check rank/role requirement
     const target = t.releasedTo || 'todos';
     if (target === 'todos') return true;
-    if (target === 'alumno') return ['alumno', 'miembro', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role || '');
-    if (target === 'miembro') return ['miembro', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role || '');
+    if (target === 'alumno') return ['alumno', 'miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role || '');
+    if (target === 'miembro') return ['miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role || '');
     if (target === 'staff') return ['moderador', 'colaborador', 'administrador'].includes(currentUser.role || '');
     
     return true;
@@ -111,10 +121,10 @@ export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }
 
   const activeTopic = filteredTopics.find(t => t.id === selectedTopicId) || sortedTopics.find(t => t.id === selectedTopicId);
 
-  // Scroll to bottom of comments when topic or comments length change
+  // Scroll to bottom of comments when comments length changes, preserving initial scroll position on selection
   useEffect(() => {
     commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeTopic?.replies?.length, selectedTopicId]);
+  }, [activeTopic?.replies?.length]);
 
   // Navigation click scroll handler
   const handleSelectTopic = (id: string) => {
@@ -133,7 +143,7 @@ export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }
     setFormContent('');
     setFormReleasedTo('todos');
     setFormIsReleased(true);
-    setFormCategory('');
+    setFormCategory(channelId || '');
     setFormPinned(false);
     setFormOrderIndex(sortedTopics.length + 1);
     setFormCommentsAllowed(true);
@@ -234,7 +244,7 @@ export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }
   if (!commentsAllowed) {
     canCommentActive = false;
   } else if (commentsTarget === 'alumno') {
-    canCommentActive = ['alumno', 'miembro', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role || '');
+    canCommentActive = ['alumno', 'miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role || '');
   } else if (commentsTarget === 'staff') {
     canCommentActive = isStaff;
   }
@@ -264,13 +274,13 @@ export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }
       <div className="bg-[#0A0A0B] border border-white/5 p-6 rounded-3xl space-y-6">
         
         {/* Section Title */}
-        <div className="flex items-center justify-between border-b border-white/5 pb-4">
-          <div>
-            <h3 className="text-sm font-sans font-bold text-white uppercase tracking-wider font-mono">Herramientas y Recursos</h3>
-            <p className="text-[11px] text-zinc-550 font-mono">GUÍAS, DESCARGAS, TRADINGVIEW Y ENTRENAMIENTO</p>
+        <div className="flex items-center justify-between border-b border-white/5 pb-4 gap-2">
+          <div className="min-w-0">
+            <h3 className="text-sm font-sans font-bold text-white uppercase tracking-wider font-mono break-words">
+              {channelName || 'Herramientas y Recursos'}
+            </h3>
           </div>
-          
-          {isStaff && (
+            {isStaff && (
             <button
               id="btn-add-tool-topic"
               onClick={handleOpenCreate}
@@ -279,33 +289,6 @@ export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }
               <Plus className="w-3.5 h-3.5" /> Crear tema
             </button>
           )}
-        </div>
-
-        {/* Dynamic Category Filtering Bar */}
-        <div className="flex items-center gap-1.5 overflow-x-auto py-1 border-b border-white/[0.03] scrollbar-none pb-3">
-          <button
-            onClick={() => handleSelectCategory('todos')}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${
-              selectedCategory === 'todos'
-                ? 'bg-pink-600/20 border border-pink-500/30 text-white shadow-[0_0_10px_rgba(236,72,153,0.1)]'
-                : 'bg-zinc-950 border border-zinc-900 text-zinc-400 hover:text-white hover:border-zinc-805'
-            }`}
-          >
-            Todos
-          </button>
-          {customCategories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => handleSelectCategory(cat.name)}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${
-                selectedCategory === cat.name
-                  ? 'bg-pink-600/20 border border-pink-500/30 text-white shadow-[0_0_10px_rgba(236,72,153,0.1)]'
-                  : 'bg-zinc-950 border border-zinc-900 text-zinc-400 hover:text-white hover:border-zinc-805'
-              }`}
-            >
-              {cat.name}
-            </button>
-          ))}
         </div>
 
         {/* Main Grid: Left Topics Feed (4 cols) & Right Detail Container (8 cols) */}
@@ -418,12 +401,21 @@ export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }
                       </div>
                       
                       {isStaff && (
-                        <button
-                          onClick={() => handleOpenEdit(activeTopic)}
-                          className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 font-medium bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 transition-all pointer-cursor"
-                        >
-                          <Edit2 className="w-3 h-3" /> Editar guía
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                          <button
+                            onClick={() => handleOpenEdit(activeTopic)}
+                            className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 font-medium bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 transition-all pointer-cursor"
+                          >
+                            <Edit2 className="w-3 h-3" /> Editar guía
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTopic(activeTopic.id)}
+                            className="text-xs text-rose-400 hover:text-white flex items-center gap-1 font-medium bg-rose-950/20 hover:bg-rose-900/40 border border-rose-900/30 rounded-lg px-2 py-1 transition-all cursor-pointer shadow-[0_0_8px_rgba(239,68,68,0.05)]"
+                            title="Eliminar esta guía permanentemente"
+                          >
+                            <Trash2 className="w-3 h-3" /> Eliminar Guía
+                          </button>
+                        </div>
                       )}
                     </div>
 
@@ -444,83 +436,83 @@ export default function HerramientasBoard({ currentUser, toolTopics, onRefresh }
                   <div className="text-xs leading-relaxed text-slate-300 bg-zinc-950/20 border border-zinc-900/50 rounded-2xl p-4 max-h-[170px] overflow-y-auto whitespace-pre-wrap font-sans">
                     {activeTopic.content}
                   </div>
-                </div>
-
-                {/* Forum Debate / Comments section */}
-                <div className="space-y-2 flex-grow flex flex-col justify-between min-h-[220px]">
-                  <div className="pb-1 border-b border-white/5 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-zinc-440 font-mono uppercase tracking-wider flex items-center gap-1">
-                      <MessageSquare className="w-3.5 h-3.5 text-zinc-400" /> Debate de Herramienta
-                    </span>
-                    {!commentsAllowed && (
-                      <span className="text-[9px] font-bold font-mono text-zinc-500 uppercase flex items-center gap-1 bg-zinc-900/60 p-1 px-2 rounded-lg border border-white/5">
-                        <Lock className="w-3 h-3" /> Solo lectura
+                         {/* Forum Debate / Comments section */}
+                {commentsAllowed && !onlyStaffCanWrite && (
+                  <div className="space-y-2 flex-grow flex flex-col justify-between min-h-[220px]">
+                    <div className="pb-1 border-b border-white/5 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-zinc-440 font-mono uppercase tracking-wider flex items-center gap-1">
+                        <MessageSquare className="w-3.5 h-3.5 text-zinc-400" /> Debate de Herramienta
                       </span>
-                    )}
-                  </div>
-
-                  {/* Replies feed */}
-                  <div className="bg-[#050506] border border-white/[0.03] rounded-2xl p-3 flex-grow max-h-[160px] overflow-y-auto space-y-2 pr-1 select-text">
-                    {(!activeTopic.replies || activeTopic.replies.length === 0) ? (
-                      <p className="text-center text-[10px] text-zinc-650 italic py-6 font-mono uppercase tracking-wider">No hay comentarios en este debate de soporte</p>
-                    ) : (
-                      activeTopic.replies.map((rep) => {
-                        const isRepStaff = ['administrador', 'colaborador', 'moderador'].includes(rep.userRole);
-                        return (
-                          <div id={`tool-rep-${rep.id}`} key={rep.id} className="p-2 border border-white/[0.03] bg-zinc-950/35 rounded-xl space-y-1">
-                            <div className="flex items-center justify-between text-[10px]">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold text-slate-100">{rep.userName}</span>
-                                <span className={`text-[8px] px-1 py-0.2 rounded uppercase font-mono tracking-wider font-bold ${
-                                  isRepStaff 
-                                    ? 'bg-pink-500/10 border border-pink-500/20 text-pink-400' 
-                                    : 'bg-slate-850 text-slate-400'
-                                }`}>
-                                  {rep.userRole}
-                                </span>
-                              </div>
-                              <span className="text-[9px] text-zinc-550 font-mono">{new Date(rep.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                            <p className="text-[11px] text-slate-350 leading-relaxed font-sans select-text">
-                              {rep.text}
-                            </p>
-                          </div>
-                        );
-                      })
-                    )}
-                    <div ref={commentsEndRef} />
-                  </div>
-
-                  {/* Reply Form / Controls restricted matches */}
-                  {canCommentActive ? (
-                    <form onSubmit={handleSendReply} className="flex gap-2 items-center">
-                      <input
-                        id="tool-reply-input"
-                        type="text"
-                        placeholder="Pregunta o comenta sobre este recurso..."
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        disabled={replyLoading}
-                        className="flex-grow bg-zinc-950 border border-zinc-850/80 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-pink-500 font-sans"
-                      />
-                      <button
-                        id="tool-reply-submit"
-                        type="submit"
-                        disabled={replyLoading || !replyText.trim()}
-                        className="py-2 px-3 bg-pink-600 hover:bg-pink-500 disabled:bg-pink-600/30 disabled:text-zinc-500 text-white rounded-xl transition-all font-bold flex items-center justify-center gap-1.5 shrink-0 hover:scale-102"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                      </button>
-                    </form>
-                  ) : (
-                    <div className="p-2 bg-zinc-900/30 rounded-xl border border-white/5 text-center text-[10px] text-zinc-500 italic font-mono uppercase tracking-wider">
-                      {commentsAllowed 
-                        ? `Aportaciones cerradas. Solo cuenta con permisos el rol: ${commentsTarget.toUpperCase()}`
-                        : "El debate de esta herramienta ha sido bloqueado como Solo Lectura por el Staff académico"
-                      }
+                      {!commentsAllowed && (
+                        <span className="text-[9px] font-bold font-mono text-zinc-500 uppercase flex items-center gap-1 bg-zinc-900/60 p-1 px-2 rounded-lg border border-white/5">
+                          <Lock className="w-3 h-3" /> Solo lectura
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
+
+                    {/* Replies feed */}
+                    <div className="bg-[#050506] border border-white/[0.03] rounded-2xl p-3 flex-grow max-h-[160px] overflow-y-auto space-y-2 pr-1 select-text">
+                      {(!activeTopic.replies || activeTopic.replies.length === 0) ? (
+                        <p className="text-center text-[10px] text-zinc-650 italic py-6 font-mono uppercase tracking-wider">No hay comentarios en este debate de soporte</p>
+                      ) : (
+                        activeTopic.replies.map((rep) => {
+                          const isRepStaff = ['administrador', 'colaborador', 'moderador'].includes(rep.userRole);
+                          return (
+                            <div id={`tool-rep-${rep.id}`} key={rep.id} className="p-2 border border-white/[0.03] bg-zinc-950/35 rounded-xl space-y-1">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-100">{rep.userName}</span>
+                                  <span className={`text-[8px] px-1 py-0.2 rounded uppercase font-mono tracking-wider font-bold ${
+                                    isRepStaff 
+                                      ? 'bg-pink-500/10 border border-pink-500/20 text-pink-400' 
+                                      : 'bg-slate-850 text-slate-400'
+                                  }`}>
+                                    {rep.userRole}
+                                  </span>
+                                </div>
+                                <span className="text-[9px] text-zinc-550 font-mono">{new Date(rep.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              </div>
+                              <p className="text-[11px] text-slate-350 leading-relaxed font-sans select-text">
+                                {rep.text}
+                              </p>
+                            </div>
+                          );
+                        })
+                      )}
+                      <div ref={commentsEndRef} />
+                    </div>
+
+                    {/* Reply Form / Controls restricted matches */}
+                    {canCommentActive ? (
+                      <form onSubmit={handleSendReply} className="flex gap-2 items-center">
+                        <input
+                          id="tool-reply-input"
+                          type="text"
+                          placeholder="Pregunta o comenta sobre este recurso..."
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          disabled={replyLoading}
+                          className="flex-grow bg-zinc-950 border border-zinc-850/80 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-pink-500 font-sans"
+                        />
+                        <button
+                          id="tool-reply-submit"
+                          type="submit"
+                          disabled={replyLoading || !replyText.trim()}
+                          className="py-2 px-3 bg-pink-600 hover:bg-pink-550 disabled:bg-pink-600/30 disabled:text-zinc-500 text-white rounded-xl transition-all font-bold flex items-center justify-center gap-1.5 shrink-0 hover:scale-102"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="p-2 bg-zinc-900/30 rounded-xl border border-white/5 text-center text-[10px] text-zinc-500 italic font-mono uppercase tracking-wider">
+                        {commentsAllowed 
+                          ? `Aportaciones cerradas. Solo cuenta con permisos el rol: ${commentsTarget.toUpperCase()}`
+                          : "El debate de esta herramienta ha sido bloqueado como Solo Lectura por el Staff académico"
+                        }
+                      </div>
+                    )}
+                  </div>
+                )}          </div>
 
               </div>
             ) : (

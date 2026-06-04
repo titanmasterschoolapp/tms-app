@@ -47,7 +47,12 @@ import {
   ToolTopic,
   ResourceReply,
   ToolReply,
-  CustomCategory
+  CustomCategory,
+  FundingCompany,
+  DashboardTexts,
+  CategorizedCategory,
+  CategorizedSubChannel,
+  CategorizedCoupon
 } from '../types';
 
 // Error handling based on firebase-integration skill
@@ -96,6 +101,32 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
+}
+
+/**
+ * Recursively sanitizes a data object for Firestore:
+ * 1. Replaces `undefined` or `null` values with empty strings "".
+ * 2. This prevents any 'Function setDoc() called with invalid data. Unsupported field value: undefined' errors.
+ */
+export function cleanFirestoreData(data: any): any {
+  if (data === null || data === undefined) {
+    return "";
+  }
+  if (typeof data !== 'object') {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map(item => cleanFirestoreData(item));
+  }
+  const cleaned: any = {};
+  for (const [key, val] of Object.entries(data)) {
+    if (val === undefined || val === null) {
+      cleaned[key] = "";
+    } else {
+      cleaned[key] = cleanFirestoreData(val);
+    }
+  }
+  return cleaned;
 }
 
 // Validation connection to Firestore on boot as per guidelines
@@ -296,6 +327,49 @@ const SEED_DISCOUNTS: DiscountRef[] = [
   }
 ];
 
+export const DEFAULT_DASHBOARD_TEXTS: DashboardTexts = {
+  bienvenidoTitle: 'TITAN MASTER SCHOOL',
+  bienvenidoSubtitle: 'Tienes estatus académico disponible como miembro pleno de la sala de simulación institucional. Todo tu material se actualiza de forma automática en tiempo real de lunes a viernes.',
+  proximasClasesTitle: 'Próximas Clases',
+  proximasClasesDesc: 'Programadas en Zoom / Google Meet para esta semana.',
+  estatusSuscripcionTitle: 'Estatus Suscripción',
+  estatusSuscripcionDesc: 'Permite acceder a Comunidad y Estrategias Pro.',
+  canalChatTitle: 'Canal de Chat Colectivo',
+  canalChatName: '# chat-alumnos',
+  canalChatDesc: 'Únete a debatir con los demás colegas del aula.',
+  avisosUrgentesTitle: 'Resumen de Avisos Urgentes',
+  herramientaRapidaTitle: 'Herramienta Rápida del Estudiante',
+  herramientaRapidaDesc: 'Usa la calculadora integrada para planificar tu riesgo de lote según tu Stop Loss de pips.',
+  conveniosTitle: 'Convenios de Fondeo & Partners Oficiales',
+  recursosTitleOverride: 'Recursos de Formación',
+  herramientasTitleOverride: 'Herramientas y Recursos',
+  herramientasSubtitleOverride: 'GUÍAS, DESCARGAS, TRADINGVIEW Y ENTRENAMIENTO',
+
+  // Newly requested titles and subtitles fallbacks:
+  avisosTitle: 'Diario de Avisos Importantes',
+  avisosSubtitle: 'MENSAJES OFICIALES DE NUESTROS PROFESORES',
+  sesionesTitle: 'Sesiones de Transmisión del Aula',
+  sesionesSubtitle: 'REUNIONES ACADÉMICAS ABIERTAS PARA ALUMNOS',
+  sesionesVIPTitle: 'Sesiones VIP de Mensualidad',
+  sesionesVIPSubtitle: 'REUNIONES DE ALTO IMPACTO EXCLUSIVAS DE SOCIOS',
+  recursosTitle: 'Recursos de Formación',
+  recursosSubtitle: 'TEMAS, MANUALES Y DESCARGAS DE ESTUDIO',
+  herramientasTitle: 'Herramientas y Recursos',
+  herramientasSubtitle: 'GUÍAS, DESCARGAS, TRADINGVIEW Y ENTRENAMIENTO',
+  discountsTitle: 'Convenios de Fondeo & Partners Oficiales',
+  discountsSubtitle: 'DESCUENTOS Y MATRICULAS EXCLUSIVAS CON CUPONES EXCLUSIVOS',
+  chatGeneralTitle: 'Aula de Chat General Colectivo',
+  chatGeneralSubtitle: 'ÚNETE A DEBATIR CON LOS DEMÁS COLEGAS DEL AULA',
+  comunidadTitle: 'Canal de Comunidad Titan',
+  comunidadSubtitle: 'SALA ABIERTA DE PREGUNTAS Y APORTACIONES GENERALES',
+  hofTitle: 'Salón de la Fama Titan Master School',
+  hofSubtitle: 'Aquí se muestran los traders destacados de la comunidad de Titan Master School, reconociendo su consistencia y resultados. Elige qué canal se muestra en la portada.',
+  featuredTitle: 'Estrategias Destacadas Académicas',
+  featuredSubtitle: 'SISTEMAS Y METODOLOGÍAS DE TRADING DE ALTA PROBABILIDAD',
+  historicalTitle: 'Biblioteca de Estrategias Ganadoras Históricas',
+  historicalSubtitle: 'ACCESO TOTAL E INMEDIATO A LA COLECCIÓN ACADÉMICA'
+};
+
 const SEED_CHAT: ChatMessage[] = [
   {
     id: 'c1',
@@ -341,6 +415,15 @@ const getLocal = <T>(key: string, seed: T): T => {
 
 const setLocal = <T>(key: string, val: T): void => {
   localStorage.setItem(`titan_${key}`, JSON.stringify(val));
+};
+
+const getUpgradedChannels = (): ChatChannel[] => {
+  let list = getLocal<ChatChannel[]>('chat_channels', SEED_CHAT_CHANNELS);
+  if (!list || list.length === 0 || !list.some(c => c.id === 'pupil_chat')) {
+    setLocal('chat_channels', SEED_CHAT_CHANNELS);
+    return [...SEED_CHAT_CHANNELS];
+  }
+  return list;
 };
 
 // Unified dynamic data structures and API functions
@@ -730,7 +813,14 @@ export const DataAPI = {
       
       return onSnapshot(q, (snap) => {
         let msgs = snap.docs.map(doc => doc.data() as ChatMessage);
-        msgs = msgs.filter(m => m.channelId === channelId || (!m.channelId && m.chatType === channelId));
+        msgs = msgs.filter(m => {
+          if (m.channelId === channelId) return true;
+          if (!m.channelId) {
+            if (channelId === 'pupil_chat' && m.chatType === 'alumno') return true;
+            if (channelId === 'community_chat' && m.chatType === 'comunidad') return true;
+          }
+          return false;
+        });
         if (!showPending) {
           msgs = msgs.filter(m => m.status === 'active');
         } else {
@@ -744,7 +834,14 @@ export const DataAPI = {
     } else {
       const checkAndPublish = () => {
         const allMsg = getLocal<ChatMessage[]>('chat_messages', SEED_CHAT);
-        let filtered = allMsg.filter(m => m.channelId === channelId || (!m.channelId && m.chatType === channelId));
+        let filtered = allMsg.filter(m => {
+          if (m.channelId === channelId) return true;
+          if (!m.channelId) {
+            if (channelId === 'pupil_chat' && m.chatType === 'alumno') return true;
+            if (channelId === 'community_chat' && m.chatType === 'comunidad') return true;
+          }
+          return false;
+        });
         if (!showPending) {
           filtered = filtered.filter(m => m.status === 'active');
         } else {
@@ -760,7 +857,7 @@ export const DataAPI = {
     }
   },
 
-  sendChatMessage: async (text: string, user: UserProfile, chatType: 'alumno' | 'comunidad', channelId?: string, imageUrl?: string): Promise<void> => {
+  sendChatMessage: async (text: string, user: UserProfile, chatType: 'alumno' | 'comunidad', channelId?: string, imageUrl?: string, documentUrl?: string, documentName?: string): Promise<void> => {
     // Check if contains links
     const checkLinks = (t: string): boolean => {
       const pattern = /https?:\/\/[^\s]+|www\.[^\s]+/i;
@@ -769,7 +866,9 @@ export const DataAPI = {
     };
 
     const hasLinks = checkLinks(text);
-    const requiresReview = hasLinks || !!imageUrl;
+    const hasAttachments = !!imageUrl || !!documentUrl;
+    const isStaff = ['administrador', 'colaborador', 'moderador'].includes(user.role || '');
+    const requiresReview = (hasLinks || hasAttachments) && !isStaff;
     
     const newMessage: any = {
       id: 'msg_' + Math.random().toString(36).substr(2, 9),
@@ -781,7 +880,8 @@ export const DataAPI = {
       channelId: channelId || chatType,
       status: requiresReview ? 'pending_review' : 'active',
       createdAt: new Date().toISOString(),
-      replies: []
+      replies: [],
+      reactions: {}
     };
 
     if (user.avatarUrl) {
@@ -789,6 +889,12 @@ export const DataAPI = {
     }
     if (imageUrl) {
       newMessage.imageUrl = imageUrl;
+    }
+    if (documentUrl) {
+      newMessage.documentUrl = documentUrl;
+    }
+    if (documentName) {
+      newMessage.documentName = documentName;
     }
 
     if (isFirebaseConfigured && db) {
@@ -808,12 +914,13 @@ export const DataAPI = {
     // Trigger alerts/notifications to staff if pending review
     if (requiresReview) {
       const usersList = getLocal<UserProfile[]>('users', []);
-      const staffList = usersList.filter(u => ['administrador', 'colaborador', 'moderador'].includes(u.role));
+      const staffList = usersList.filter(u => ['administrador', 'colaborador', 'moderador'].includes(u.role || ''));
       staffList.forEach(s => {
+        const attachmentType = hasLinks ? 'enlaces' : (imageUrl ? 'imágenes' : 'documentos');
         DataAPI.addNotificationForUser(
           s.uid,
           `⚠️ Mensaje retenido en #${channelId || chatType}`,
-          `Mensaje de ${user.displayName} contiene ${hasLinks ? 'enlace' : 'imagen'} y espera aprobación.`,
+          `Mensaje de ${user.displayName} contiene ${attachmentType} y espera aprobación.`,
           'notice'
         );
       });
@@ -881,12 +988,14 @@ export const DataAPI = {
     }
   },
 
-  // Moderator/Admin controls: hide or delete
-  moderateMessage: async (messageId: string, action: 'hide' | 'delete'): Promise<void> => {
+  // Moderator/Admin controls: approve, hide or delete
+  moderateMessage: async (messageId: string, action: 'approve' | 'hide' | 'delete'): Promise<void> => {
     if (isFirebaseConfigured && db) {
       try {
         const msgRef = doc(db, 'chat_messages', messageId);
-        if (action === 'hide') {
+        if (action === 'approve') {
+          await updateDoc(msgRef, { status: 'active' });
+        } else if (action === 'hide') {
           await updateDoc(msgRef, { status: 'hidden' });
         } else {
           await deleteDoc(msgRef);
@@ -897,8 +1006,13 @@ export const DataAPI = {
       }
     } else {
       const allMsg = getLocal<ChatMessage[]>('chat_messages', SEED_CHAT);
-      if (action === 'hide') {
-        const idx = allMsg.findIndex(m => m.id === messageId);
+      const idx = allMsg.findIndex(m => m.id === messageId);
+      if (action === 'approve') {
+        if (idx !== -1) {
+          allMsg[idx].status = 'active';
+          setLocal('chat_messages', allMsg);
+        }
+      } else if (action === 'hide') {
         if (idx !== -1) {
           allMsg[idx].status = 'hidden';
           setLocal('chat_messages', allMsg);
@@ -908,6 +1022,45 @@ export const DataAPI = {
         setLocal('chat_messages', filtered);
       }
       window.dispatchEvent(new Event('storage'));
+    }
+  },
+
+  toggleMessageReaction: async (messageId: string, emoji: string, userId: string): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        const msgRef = doc(db, 'chat_messages', messageId);
+        const snap = await getDoc(msgRef);
+        if (snap.exists()) {
+          const msg = snap.data() as ChatMessage;
+          const reactions = msg.reactions || {};
+          const users = reactions[emoji] || [];
+          if (users.includes(userId)) {
+            reactions[emoji] = users.filter(id => id !== userId);
+          } else {
+            reactions[emoji] = [...users, userId];
+          }
+          await updateDoc(msgRef, { reactions });
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `chat_messages/${messageId}`);
+        throw err;
+      }
+    } else {
+      const msgs = getLocal<ChatMessage[]>('chat_messages', SEED_CHAT);
+      const idx = msgs.findIndex(m => m.id === messageId);
+      if (idx !== -1) {
+        const msg = msgs[idx];
+        const reactions = msg.reactions ? { ...msg.reactions } : {};
+        const users = reactions[emoji] || [];
+        if (users.includes(userId)) {
+          reactions[emoji] = users.filter(id => id !== userId);
+        } else {
+          reactions[emoji] = [...users, userId];
+        }
+        msgs[idx].reactions = reactions;
+        setLocal('chat_messages', msgs);
+        window.dispatchEvent(new Event('storage'));
+      }
     }
   },
 
@@ -1275,6 +1428,119 @@ export const DataAPI = {
     }
   },
 
+  getDashboardTexts: async (): Promise<DashboardTexts> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        const snap = await getDoc(doc(db, 'settings', 'dashboard_texts'));
+        if (snap.exists()) {
+          return { ...DEFAULT_DASHBOARD_TEXTS, ...snap.data() };
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    const local = localStorage.getItem('titan_dashboard_texts');
+    if (local) {
+      try { return { ...DEFAULT_DASHBOARD_TEXTS, ...JSON.parse(local) }; } catch (e) {}
+    }
+    return DEFAULT_DASHBOARD_TEXTS;
+  },
+
+  saveDashboardTexts: async (texts: DashboardTexts): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'settings', 'dashboard_texts'), texts);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    localStorage.setItem('titan_dashboard_texts', JSON.stringify(texts));
+    window.dispatchEvent(new Event('storage'));
+  },
+
+  // ---- FUNDING COMPANIES ----
+  getFundingCompanies: async (): Promise<FundingCompany[]> => {
+    const sortCompanies = (arr: FundingCompany[]) => {
+      return [...arr].sort((a,b) => {
+        const indexA = a.orderIndex !== undefined ? a.orderIndex : 999;
+        const indexB = b.orderIndex !== undefined ? b.orderIndex : 999;
+        if (indexA !== indexB) return indexA - indexB;
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+    };
+
+    if (isFirebaseConfigured && db) {
+      try {
+        const snap = await getDocs(collection(db, 'funding_companies'));
+        const list = snap.docs.map(doc => doc.data() as FundingCompany);
+        if (list.length < SEED_FUNDING_COMPANIES.length) {
+          for (const fc of SEED_FUNDING_COMPANIES) {
+            const exists = list.some(item => item.id === fc.id);
+            if (!exists) {
+              await setDoc(doc(db, 'funding_companies', fc.id), fc);
+              list.push(fc);
+            }
+          }
+          return sortCompanies(list);
+        }
+        return sortCompanies(list);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, 'funding_companies');
+        return sortCompanies(SEED_FUNDING_COMPANIES);
+      }
+    } else {
+      const list = getLocal<FundingCompany[]>('funding_companies', SEED_FUNDING_COMPANIES);
+      if (list.length < SEED_FUNDING_COMPANIES.length) {
+        for (const fc of SEED_FUNDING_COMPANIES) {
+          const exists = list.some(item => item.id === fc.id);
+          if (!exists) {
+            list.push(fc);
+          }
+        }
+        setLocal('funding_companies', list);
+      }
+      return sortCompanies(list);
+    }
+  },
+
+  saveFundingCompany: async (fc: FundingCompany): Promise<void> => {
+    const cleaned = cleanFirestoreData(fc);
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'funding_companies', cleaned.id), cleaned);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `funding_companies/${cleaned.id}`);
+        throw err;
+      }
+    } else {
+      const fcs = getLocal<FundingCompany[]>('funding_companies', SEED_FUNDING_COMPANIES);
+      const idx = fcs.findIndex(f => f.id === fc.id);
+      if (idx !== -1) {
+        fcs[idx] = fc;
+      } else {
+        fcs.push(fc);
+      }
+      setLocal('funding_companies', fcs);
+      window.dispatchEvent(new Event('storage'));
+    }
+  },
+
+  deleteFundingCompany: async (id: string): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'funding_companies', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `funding_companies/${id}`);
+        throw err;
+      }
+    } else {
+      const fcs = getLocal<FundingCompany[]>('funding_companies', SEED_FUNDING_COMPANIES);
+      const filtered = fcs.filter(f => f.id !== id);
+      setLocal('funding_companies', filtered);
+      window.dispatchEvent(new Event('storage'));
+    }
+  },
+
   // ---- NOTIFICATIONS ----
   getNotifications: (userId: string, callback: (notifs: AppNotification[]) => void) => {
     const key = `notifications_${userId}`;
@@ -1332,54 +1598,74 @@ export const DataAPI = {
 
   // ---- CHAT CHANNELS ----
   getChatChannels: async (): Promise<ChatChannel[]> => {
+    const sortChans = (arr: ChatChannel[]) => {
+      return [...arr].sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        const indexA = a.orderIndex !== undefined ? a.orderIndex : 999;
+        const indexB = b.orderIndex !== undefined ? b.orderIndex : 999;
+        if (indexA !== indexB) return indexA - indexB;
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+    };
+
     if (isFirebaseConfigured && db) {
       try {
         const snap = await getDocs(collection(db, 'chat_channels'));
         const list = snap.docs.map(doc => doc.data() as ChatChannel);
-        if (list.length === 0) {
+        if (list.length === 0 || !list.some(c => c.id === 'pupil_chat')) {
+          for (const oldDoc of snap.docs) {
+            await deleteDoc(oldDoc.ref);
+          }
           for (const ch of SEED_CHAT_CHANNELS) {
             await setDoc(doc(db, 'chat_channels', ch.id), ch);
           }
-          const sortedSeeds = [...SEED_CHAT_CHANNELS];
-          sortedSeeds.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-          return sortedSeeds;
+          return sortChans(SEED_CHAT_CHANNELS);
         }
-        list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        return list;
+        return sortChans(list);
       } catch (err) {
         handleFirestoreError(err, OperationType.LIST, 'chat_channels');
-        const sortedSeeds = [...SEED_CHAT_CHANNELS];
-        sortedSeeds.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        return sortedSeeds;
+        return sortChans(SEED_CHAT_CHANNELS);
       }
     } else {
-      const list = getLocal<ChatChannel[]>('chat_channels', SEED_CHAT_CHANNELS);
-      list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      return list;
+      const list = getUpgradedChannels();
+      return sortChans(list);
     }
   },
 
   subscribeChatChannels: (callback: (chans: ChatChannel[]) => void) => {
+    const sortChans = (arr: ChatChannel[]) => {
+      return [...arr].sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        const indexA = a.orderIndex !== undefined ? a.orderIndex : 999;
+        const indexB = b.orderIndex !== undefined ? b.orderIndex : 999;
+        if (indexA !== indexB) return indexA - indexB;
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+    };
+
     if (isFirebaseConfigured && db) {
       const q = query(collection(db, 'chat_channels'));
       return onSnapshot(q, (snap) => {
         let list = snap.docs.map(doc => doc.data() as ChatChannel);
-        if (list.length === 0) {
+        if (list.length === 0 || !list.some(c => c.id === 'pupil_chat')) {
+          for (const oldDoc of snap.docs) {
+            deleteDoc(oldDoc.ref).catch(console.error);
+          }
           for (const ch of SEED_CHAT_CHANNELS) {
             setDoc(doc(db, 'chat_channels', ch.id), ch).catch(console.error);
           }
           list = [...SEED_CHAT_CHANNELS];
         }
-        list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        callback(list);
+        callback(sortChans(list));
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, 'chat_channels');
       });
     } else {
       const publish = () => {
-        const list = getLocal<ChatChannel[]>('chat_channels', SEED_CHAT_CHANNELS);
-        list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        callback(list);
+        const list = getUpgradedChannels();
+        callback(sortChans(list));
       };
       publish();
       window.addEventListener('storage', publish);
@@ -1398,7 +1684,7 @@ export const DataAPI = {
         throw err;
       }
     } else {
-      const chans = getLocal<ChatChannel[]>('chat_channels', SEED_CHAT_CHANNELS);
+      const chans = getUpgradedChannels();
       const idx = chans.findIndex(c => c.id === chan.id);
       if (idx !== -1) {
         chans[idx] = chan;
@@ -1419,7 +1705,7 @@ export const DataAPI = {
         throw err;
       }
     } else {
-      const chans = getLocal<ChatChannel[]>('chat_channels', SEED_CHAT_CHANNELS);
+      const chans = getUpgradedChannels();
       const filtered = chans.filter(c => c.id !== id);
       setLocal('chat_channels', filtered);
       window.dispatchEvent(new Event('storage'));
@@ -1672,8 +1958,321 @@ export const DataAPI = {
       setLocal('custom_categories', filtered);
       window.dispatchEvent(new Event('storage'));
     }
+  },
+
+  // --- CATEGORIZED CHANNELS & SYSTEMS (FORMATO 1) ---
+  getCategorizedCategories: async (channelId: string): Promise<CategorizedCategory[]> => {
+    const sortParams = (arr: CategorizedCategory[]) => {
+      return [...arr].filter(c => c.channelId === channelId).sort((a, b) => a.orderIndex - b.orderIndex);
+    };
+    if (isFirebaseConfigured && db) {
+      try {
+        const snap = await getDocs(collection(db, 'categorized_categories'));
+        const list = snap.docs.map(doc => doc.data() as CategorizedCategory);
+        const filtered = list.filter(c => c.channelId === channelId);
+        if (filtered.length === 0) {
+          const defaults = DEFAULT_CATEGORIZED_CATEGORIES.filter(c => c.channelId === channelId);
+          for (const c of defaults) {
+            await setDoc(doc(db, 'categorized_categories', c.id), c);
+          }
+          return sortParams(DEFAULT_CATEGORIZED_CATEGORIES);
+        }
+        return sortParams(list);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, 'categorized_categories');
+        return sortParams(DEFAULT_CATEGORIZED_CATEGORIES);
+      }
+    } else {
+      const list = getLocal<CategorizedCategory[]>('categorized_categories', DEFAULT_CATEGORIZED_CATEGORIES);
+      return sortParams(list);
+    }
+  },
+
+  saveCategorizedCategory: async (category: CategorizedCategory): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'categorized_categories', category.id), category);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `categorized_categories/${category.id}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<CategorizedCategory[]>('categorized_categories', DEFAULT_CATEGORIZED_CATEGORIES);
+      const idx = list.findIndex(c => c.id === category.id);
+      if (idx !== -1) {
+        list[idx] = category;
+      } else {
+        list.push(category);
+      }
+      setLocal('categorized_categories', list);
+      window.dispatchEvent(new Event('storage'));
+    }
+  },
+
+  deleteCategorizedCategory: async (id: string): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'categorized_categories', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `categorized_categories/${id}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<CategorizedCategory[]>('categorized_categories', DEFAULT_CATEGORIZED_CATEGORIES);
+      const filtered = list.filter(c => c.id !== id);
+      setLocal('categorized_categories', filtered);
+      window.dispatchEvent(new Event('storage'));
+    }
+  },
+
+  getCategorizedSubChannels: async (channelId: string): Promise<CategorizedSubChannel[]> => {
+    const sortParams = (arr: CategorizedSubChannel[]) => {
+      return [...arr].filter(c => c.channelId === channelId).sort((a, b) => a.orderIndex - b.orderIndex);
+    };
+    if (isFirebaseConfigured && db) {
+      try {
+        const snap = await getDocs(collection(db, 'categorized_subchannels'));
+        const list = snap.docs.map(doc => doc.data() as CategorizedSubChannel);
+        const filtered = list.filter(c => c.channelId === channelId);
+        if (filtered.length === 0) {
+          const defaults = DEFAULT_CATEGORIZED_SUBCHANNELS.filter(c => c.channelId === channelId);
+          for (const c of defaults) {
+            await setDoc(doc(db, 'categorized_subchannels', c.id), c);
+          }
+          return sortParams(DEFAULT_CATEGORIZED_SUBCHANNELS);
+        }
+        return sortParams(list);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, 'categorized_subchannels');
+        return sortParams(DEFAULT_CATEGORIZED_SUBCHANNELS);
+      }
+    } else {
+      const list = getLocal<CategorizedSubChannel[]>('categorized_subchannels', DEFAULT_CATEGORIZED_SUBCHANNELS);
+      return sortParams(list);
+    }
+  },
+
+  saveCategorizedSubChannel: async (sub: CategorizedSubChannel): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'categorized_subchannels', sub.id), sub);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `categorized_subchannels/${sub.id}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<CategorizedSubChannel[]>('categorized_subchannels', DEFAULT_CATEGORIZED_SUBCHANNELS);
+      const idx = list.findIndex(c => c.id === sub.id);
+      if (idx !== -1) {
+        list[idx] = sub;
+      } else {
+        list.push(sub);
+      }
+      setLocal('categorized_subchannels', list);
+      window.dispatchEvent(new Event('storage'));
+    }
+  },
+
+  deleteCategorizedSubChannel: async (id: string): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'categorized_subchannels', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `categorized_subchannels/${id}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<CategorizedSubChannel[]>('categorized_subchannels', DEFAULT_CATEGORIZED_SUBCHANNELS);
+      const filtered = list.filter(c => c.id !== id);
+      setLocal('categorized_subchannels', filtered);
+      window.dispatchEvent(new Event('storage'));
+    }
+  },
+
+  getCategorizedCoupons: async (channelId: string): Promise<CategorizedCoupon[]> => {
+    const sortParams = (arr: CategorizedCoupon[]) => {
+      return [...arr].filter(c => c.channelId === channelId).sort((a, b) => a.orderIndex - b.orderIndex);
+    };
+    if (isFirebaseConfigured && db) {
+      try {
+        const snap = await getDocs(collection(db, 'categorized_coupons'));
+        const list = snap.docs.map(doc => doc.data() as CategorizedCoupon);
+        const filtered = list.filter(c => c.channelId === channelId);
+        if (filtered.length === 0) {
+          const defaults = DEFAULT_CATEGORIZED_COUPONS.filter(c => c.channelId === channelId);
+          for (const c of defaults) {
+            await setDoc(doc(db, 'categorized_coupons', c.id), c);
+          }
+          return sortParams(DEFAULT_CATEGORIZED_COUPONS);
+        }
+        return sortParams(list);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, 'categorized_coupons');
+        return sortParams(DEFAULT_CATEGORIZED_COUPONS);
+      }
+    } else {
+      const list = getLocal<CategorizedCoupon[]>('categorized_coupons', DEFAULT_CATEGORIZED_COUPONS);
+      return sortParams(list);
+    }
+  },
+
+  saveCategorizedCoupon: async (coupon: CategorizedCoupon): Promise<void> => {
+    const cleaned = cleanFirestoreData(coupon);
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'categorized_coupons', cleaned.id), cleaned);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `categorized_coupons/${cleaned.id}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<CategorizedCoupon[]>('categorized_coupons', DEFAULT_CATEGORIZED_COUPONS);
+      const idx = list.findIndex(c => c.id === coupon.id);
+      if (idx !== -1) {
+        list[idx] = coupon;
+      } else {
+        list.push(coupon);
+      }
+      setLocal('categorized_coupons', list);
+      window.dispatchEvent(new Event('storage'));
+    }
+  },
+
+  deleteCategorizedCoupon: async (id: string): Promise<void> => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'categorized_coupons', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `categorized_coupons/${id}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<CategorizedCoupon[]>('categorized_coupons', DEFAULT_CATEGORIZED_COUPONS);
+      const filtered = list.filter(c => c.id !== id);
+      setLocal('categorized_coupons', filtered);
+      window.dispatchEvent(new Event('storage'));
+    }
   }
 };
+
+export const DEFAULT_CATEGORIZED_CATEGORIES: CategorizedCategory[] = [
+  // For 'pupil_chat'
+  { id: 'pc_cat_debates', channelId: 'pupil_chat', name: 'GENERAL', orderIndex: 0, createdAt: new Date().toISOString() },
+  { id: 'pc_cat_comunidad', channelId: 'pupil_chat', name: 'COMUNIDAD', orderIndex: 1, createdAt: new Date().toISOString() },
+  { id: 'pc_cat_claustro', channelId: 'pupil_chat', name: 'CLAUSTRO INTERNO', orderIndex: 2, createdAt: new Date().toISOString() },
+
+  // For 'pupil_discounts'
+  { id: 'pd_cat_fondeo', channelId: 'pupil_discounts', name: '📊 Empresas de Fondeo', orderIndex: 1, createdAt: new Date().toISOString() },
+  { id: 'pd_cat_tools', channelId: 'pupil_discounts', name: '🛠️ Herramientas', orderIndex: 2, createdAt: new Date().toISOString() }
+];
+
+export const DEFAULT_CATEGORIZED_SUBCHANNELS: CategorizedSubChannel[] = [
+  // For 'pupil_chat'
+  { id: 'pc_sub_general', channelId: 'pupil_chat', categoryId: 'pc_cat_debates', name: 'general', orderIndex: 0, createdAt: new Date().toISOString() },
+  { id: 'pc_sub_comunidad', channelId: 'pupil_chat', categoryId: 'pc_cat_comunidad', name: 'comunidad-tms', orderIndex: 0, createdAt: new Date().toISOString() },
+  { id: 'pc_sub_claustro', channelId: 'pupil_chat', categoryId: 'pc_cat_claustro', name: 'claustro-staff', orderIndex: 0, createdAt: new Date().toISOString() },
+
+  // For 'pupil_discounts'
+  { id: 'pd_sub_apex', channelId: 'pupil_discounts', categoryId: 'pd_cat_fondeo', name: 'apex', orderIndex: 0, createdAt: new Date().toISOString() },
+  { id: 'pd_sub_e2t', channelId: 'pupil_discounts', categoryId: 'pd_cat_fondeo', name: 'e2t', orderIndex: 1, createdAt: new Date().toISOString() },
+  { id: 'pd_sub_fundednext', channelId: 'pupil_discounts', categoryId: 'pd_cat_fondeo', name: 'fundednext', orderIndex: 2, createdAt: new Date().toISOString() },
+  { id: 'pd_sub_ftmo', channelId: 'pupil_discounts', categoryId: 'pd_cat_fondeo', name: 'ftmo', orderIndex: 3, createdAt: new Date().toISOString() },
+  { id: 'pd_sub_tv', channelId: 'pupil_discounts', categoryId: 'pd_cat_tools', name: 'tradingview', orderIndex: 0, createdAt: new Date().toISOString() },
+  { id: 'pd_sub_mt5', channelId: 'pupil_discounts', categoryId: 'pd_cat_tools', name: 'metatrader5', orderIndex: 1, createdAt: new Date().toISOString() },
+  { id: 'pd_sub_qt', channelId: 'pupil_discounts', categoryId: 'pd_cat_tools', name: 'quanttower', orderIndex: 2, createdAt: new Date().toISOString() }
+];
+
+export const DEFAULT_CATEGORIZED_COUPONS: CategorizedCoupon[] = [
+  {
+    id: 'coup_apex',
+    channelId: 'pupil_discounts',
+    subChannelId: 'pd_sub_apex',
+    name: 'Apex Trader Funding',
+    coupon: 'CUPÓN: TMS',
+    description: 'La firma de fondeo de futuros líder. Obtén un descuento exclusivo del 80%-90% en tus cuentas de evaluación usando nuestro código promocional verificado escolar.',
+    code: 'TITAN80',
+    link: 'https://apextraderfunding.com/?c=titan80',
+    active: true,
+    orderIndex: 0,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'coup_e2t',
+    channelId: 'pupil_discounts',
+    subChannelId: 'pd_sub_e2t',
+    name: 'Earn2Trade',
+    coupon: 'PROMO ACTIVA',
+    description: 'Accede al programa Trader Career Path o Gauntlet Mini de forma preferencial. Evaluaciones profesionales en futuros con reglas claras de consistencia y soporte premium.',
+    code: 'TITANE2T45',
+    link: 'https://www.earn2trade.com/?a=titan40',
+    active: true,
+    orderIndex: 0,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'coup_fundednext',
+    channelId: 'pupil_discounts',
+    subChannelId: 'pd_sub_fundednext',
+    name: 'FundedNext',
+    coupon: '10% OFF',
+    description: 'Excelente prop firm para operar Forex, CFD, metales e índices mundiales con spreads hiper-bajos. Sin límites de tiempo y opción de recibir pagos desde la misma fase de evaluación.',
+    code: 'TITANNEXT10',
+    link: 'https://fundednext.com/?ref=titan',
+    active: true,
+    orderIndex: 0,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'coup_ftmo',
+    channelId: 'pupil_discounts',
+    subChannelId: 'pd_sub_ftmo',
+    name: 'FTMO Prop Firm',
+    coupon: '5% REEMBOLSO',
+    description: 'La firma de fondeo más segura, duradera y consolidada a nivel global. Brinda condiciones reales de mercado en Forex y una suite de auditoría técnica que te ayudará a corregir tus peores hábitos de trading.',
+    code: 'TITANFTMO5',
+    link: 'https://ftmo.com/es/?affiliate=titan5',
+    active: true,
+    orderIndex: 0,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'coup_tv',
+    channelId: 'pupil_discounts',
+    subChannelId: 'pd_sub_tv',
+    name: 'TradingView Premium',
+    coupon: '30% DESCUENTO',
+    description: 'La herramienta definitiva para análisis técnico institucional y fractal. Registra tu cuenta educativa para gozar de descuentos en tus mensualidades.',
+    code: 'TITANVIEW30',
+    link: 'https://tradingview.com/?aff=titan30',
+    active: true,
+    orderIndex: 0,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'coup_mt5',
+    channelId: 'pupil_discounts',
+    subChannelId: 'pd_sub_mt5',
+    name: 'MetaTrader 5',
+    coupon: 'DESCARGA GRATUITA',
+    description: 'La plataforma multiactivos definitiva para Forex y CFDs, preferida por millones de traders y soportada por la mayoría de brokers regulados.',
+    link: 'https://www.metatrader5.com/',
+    active: true,
+    orderIndex: 0,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'coup_qt',
+    channelId: 'pupil_discounts',
+    subChannelId: 'pd_sub_qt',
+    name: 'QuantTower',
+    coupon: 'LICENCIA DEMO',
+    description: 'Plataforma de trading profesional de nivel institucional para analítica de profundidad de mercado o flujo de órdenes (Order Flow/Volume).',
+    link: 'https://www.quantower.com/',
+    active: true,
+    orderIndex: 0,
+    createdAt: new Date().toISOString()
+  }
+];
 
 export const SEED_CUSTOM_CATEGORIES: CustomCategory[] = [
   { id: 'cat_herramientas', name: 'Herramientas', createdAt: new Date().toISOString() },
@@ -1687,11 +2286,20 @@ export const SEED_CUSTOM_CATEGORIES: CustomCategory[] = [
 ];
 
 export const SEED_CHAT_CHANNELS: ChatChannel[] = [
-  { id: 'general', name: 'general', category: 'Chat·General', onlyStaffCanWrite: false, createdAt: new Date().toISOString() },
-  { id: 'anuncios-academia', name: 'anuncios-academia', category: 'Chat·General', onlyStaffCanWrite: true, createdAt: new Date().toISOString() },
-  { id: 'mesa-redonda-vip', name: 'mesa-redonda-vip', category: 'Comunidad', onlyStaffCanWrite: false, createdAt: new Date().toISOString() },
-  { id: 'ideas-y-analisis', name: 'ideas-y-analisis', category: 'Comunidad', onlyStaffCanWrite: false, createdAt: new Date().toISOString() },
-  { id: 'staff-coordinacion', name: 'staff-coordinacion', category: 'Claustro', onlyStaffCanWrite: false, createdAt: new Date().toISOString() }
+  // SECCIÓN ALUMNO
+  { id: 'pupil_chat', name: 'Chat general', category: 'alumno', type: 'chat', onlyStaffCanWrite: false, orderIndex: 0, pinned: false, createdAt: new Date().toISOString() },
+  { id: 'pupil_resources', name: 'Recursos', category: 'alumno', type: 'resources', onlyStaffCanWrite: false, orderIndex: 1, pinned: false, createdAt: new Date().toISOString() },
+  { id: 'pupil_tools', name: 'Herramientas', category: 'alumno', type: 'tools', onlyStaffCanWrite: false, orderIndex: 2, pinned: false, createdAt: new Date().toISOString() },
+  { id: 'pupil_discounts', name: 'Descuentos y cupones', category: 'alumno', type: 'discounts', onlyStaffCanWrite: false, orderIndex: 3, pinned: false, createdAt: new Date().toISOString() },
+  { id: 'pupil_meetings', name: 'Sesiones Zoom/Meet', category: 'alumno', type: 'meetings', onlyStaffCanWrite: false, orderIndex: 4, pinned: false, createdAt: new Date().toISOString() },
+  { id: 'pupil_notices', name: 'Avisos', category: 'alumno', type: 'notices', onlyStaffCanWrite: false, orderIndex: 5, pinned: false, createdAt: new Date().toISOString() },
+
+  // COMUNIDAD
+  { id: 'community_chat', name: 'Chat comunidad', category: 'comunidad', type: 'chat', onlyStaffCanWrite: false, orderIndex: 0, pinned: false, createdAt: new Date().toISOString() },
+  { id: 'community_meetings', name: 'Sesiones comunidad', category: 'comunidad', type: 'meetings', onlyStaffCanWrite: false, orderIndex: 1, pinned: false, createdAt: new Date().toISOString() },
+  { id: 'community_hof', name: 'Salón de la fama', category: 'comunidad', type: 'hof', onlyStaffCanWrite: false, orderIndex: 2, pinned: false, createdAt: new Date().toISOString() },
+  { id: 'community_featured', name: 'Estrategias destacadas', category: 'comunidad', type: 'featured', onlyStaffCanWrite: false, orderIndex: 3, pinned: false, createdAt: new Date().toISOString() },
+  { id: 'community_library', name: 'Históricas ganadoras', category: 'comunidad', type: 'library', onlyStaffCanWrite: false, orderIndex: 4, pinned: false, createdAt: new Date().toISOString() }
 ];
 
 export const SEED_RESOURCE_TOPICS: ResourceTopic[] = [
@@ -1710,3 +2318,95 @@ function SEED_STRATEGIES_HISTROLLER_FALLBACK(): StrategyHistorical[] {
 function SEED_STRATEGIES_HISTROLLER_LOV(): StrategyHistorical[] {
   return SEED_STRATEGIES_HISTORICAL;
 }
+
+export const SEED_FUNDING_COMPANIES: FundingCompany[] = [
+  {
+    id: 'coup_apex',
+    name: 'Apex Trader Funding',
+    coupon: 'CUPÓN: TMS',
+    description: 'La firma de fondeo de futuros líder. Obtén un descuento exclusivo del 80%-90% en tus cuentas de evaluación usando nuestro código promocional verificado escolar.',
+    code: 'TITAN80',
+    link: 'https://apextraderfunding.com/?c=titan80',
+    active: true,
+    featured: true,
+    orderIndex: 0,
+    createdAt: new Date().toISOString(),
+    subChannelId: 'pd_sub_apex'
+  },
+  {
+    id: 'coup_e2t',
+    name: 'Earn2Trade',
+    coupon: 'PROMO ACTIVA',
+    description: 'Accede al programa Trader Career Path o Gauntlet Mini de forma preferencial. Evaluaciones profesionales en futuros con reglas claras de consistencia y soporte premium.',
+    code: 'TITANE2T45',
+    link: 'https://www.earn2trade.com/?a=titan40',
+    active: true,
+    featured: true,
+    orderIndex: 1,
+    createdAt: new Date().toISOString(),
+    subChannelId: 'pd_sub_e2t'
+  },
+  {
+    id: 'coup_fundednext',
+    name: 'FundedNext',
+    coupon: '10% OFF',
+    description: 'Excelente prop firm para operar Forex, CFD, metales e índices mundiales con spreads hiper-bajos. Sin límites de tiempo y opción de recibir pagos desde la misma fase de evaluación.',
+    code: 'TITANNEXT10',
+    link: 'https://fundednext.com/?ref=titan',
+    active: true,
+    featured: true,
+    orderIndex: 2,
+    createdAt: new Date().toISOString(),
+    subChannelId: 'pd_sub_fundednext'
+  },
+  {
+    id: 'coup_ftmo',
+    name: 'FTMO Prop Firm',
+    coupon: '5% REEMBOLSO',
+    description: 'La firma de fondeo más segura, duradera y consolidada a nivel global. Brinda condiciones reales de mercado en Forex y una suite de auditoría técnica que te ayudará a corregir tus peores hábitos de trading.',
+    code: 'TITANFTMO5',
+    link: 'https://ftmo.com/es/?affiliate=titan5',
+    active: true,
+    featured: true,
+    orderIndex: 3,
+    createdAt: new Date().toISOString(),
+    subChannelId: 'pd_sub_ftmo'
+  },
+  {
+    id: 'coup_tv',
+    name: 'TradingView Premium',
+    coupon: '30% DESCUENTO',
+    description: 'La herramienta definitiva para análisis técnico institucional y fractal. Registra tu cuenta educativa para gozar de descuentos en tus mensualidades.',
+    code: 'TITANVIEW30',
+    link: 'https://tradingview.com/?aff=titan30',
+    active: true,
+    featured: true,
+    orderIndex: 4,
+    createdAt: new Date().toISOString(),
+    subChannelId: 'pd_sub_tv'
+  },
+  {
+    id: 'coup_mt5',
+    name: 'MetaTrader 5',
+    coupon: 'DESCARGA GRATUITA',
+    description: 'La plataforma multiactivos definitiva para Forex y CFDs, preferida por millones de traders y soportada por la mayoría de brokers regulados.',
+    link: 'https://www.metatrader5.com/',
+    active: true,
+    featured: true,
+    orderIndex: 5,
+    createdAt: new Date().toISOString(),
+    subChannelId: 'pd_sub_mt5'
+  },
+  {
+    id: 'coup_qt',
+    name: 'QuantTower',
+    coupon: 'LICENCIA DEMO',
+    description: 'Plataforma de trading profesional de nivel institucional para analítica de profundidad de mercado o flujo de órdenes (Order Flow/Volume).',
+    link: 'https://www.quantower.com/',
+    active: true,
+    featured: true,
+    orderIndex: 6,
+    createdAt: new Date().toISOString(),
+    subChannelId: 'pd_sub_qt'
+  }
+];

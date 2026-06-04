@@ -16,9 +16,19 @@ interface RecursosBoardProps {
   currentUser: UserProfile;
   resourceTopics: ResourceTopic[];
   onRefresh: () => void;
+  channelId?: string;
+  channelName?: string;
+  onlyStaffCanWrite?: boolean;
 }
 
-export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }: RecursosBoardProps) {
+export default function RecursosBoard({ 
+  currentUser, 
+  resourceTopics, 
+  onRefresh, 
+  channelId,
+  channelName,
+  onlyStaffCanWrite
+}: RecursosBoardProps) {
   const isStaff = ['administrador', 'colaborador', 'moderador'].includes(currentUser.role);
   
   // Selection & Categories
@@ -69,8 +79,8 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
     // Check rank/role requirement
     const target = t.releasedTo || 'todos';
     if (target === 'todos') return true;
-    if (target === 'alumno') return ['alumno', 'miembro', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role);
-    if (target === 'miembro') return ['miembro', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role);
+    if (target === 'alumno') return ['alumno', 'miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role);
+    if (target === 'miembro') return ['miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role);
     if (target === 'staff') return ['moderador', 'colaborador', 'administrador'].includes(currentUser.role);
     
     return true;
@@ -109,10 +119,10 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
 
   const activeTopic = filteredTopics.find(t => t.id === selectedTopicId) || sortedTopics.find(t => t.id === selectedTopicId);
 
-  // Scroll to bottom of comments when topic or comments length change, maintaining reading position guidelines
+  // Scroll to bottom of comments when comments length changes, preserving initial scroll position on selection
   useEffect(() => {
     commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeTopic?.replies?.length, selectedTopicId]);
+  }, [activeTopic?.replies?.length]);
 
   // Handler for topic change scroll to top as requested
   const handleSelectTopic = (id: string) => {
@@ -131,7 +141,7 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
     setFormContent('');
     setFormReleasedTo('todos');
     setFormIsReleased(true);
-    setFormCategory('');
+    setFormCategory(channelId || '');
     setFormPinned(false);
     setFormOrderIndex(sortedTopics.length + 1);
     setFormCommentsAllowed(true);
@@ -232,7 +242,7 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
   if (!commentsAllowed || commentsTarget === 'ninguno') {
     canCommentActive = false;
   } else if (commentsTarget === 'alumno') {
-    canCommentActive = ['alumno', 'miembro', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role);
+    canCommentActive = ['alumno', 'miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role);
   } else if (commentsTarget === 'staff') {
     canCommentActive = isStaff;
   }
@@ -243,9 +253,11 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
       {/* Category Selection Tabs & Dynamic Channels/Temas list on the left (4 cols) */}
       <div className="lg:col-span-4 border-r border-white/5 pr-4 flex flex-col space-y-4">
         <div>
-          <div className="flex items-center justify-between pb-3 border-b border-white/5">
-            <div>
-              <h3 className="text-sm font-sans font-bold text-white uppercase tracking-wider">Recursos de Formación</h3>
+          <div className="flex items-center justify-between pb-3 border-b border-white/5 gap-2">
+            <div className="min-w-0">
+              <h3 className="text-sm font-sans font-bold text-white uppercase tracking-wider break-words">
+                {channelName || 'Recursos de Formación'}
+              </h3>
             </div>
             
             {isStaff && (
@@ -258,33 +270,6 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
                 <Plus className="w-3.5 h-3.5" /> Nuevo
               </button>
             )}
-          </div>
-
-          {/* Dynamic Categories Tab Slider */}
-          <div className="flex items-center gap-1.5 overflow-x-auto py-2.5 scrollbar-thin border-b border-white/[0.03]">
-            <button
-              onClick={() => handleSelectCategory('todos')}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${
-                selectedCategory === 'todos'
-                  ? 'bg-violet-600/20 border border-violet-500/30 text-white'
-                  : 'bg-zinc-950 border border-zinc-850/80 text-zinc-400 hover:text-white'
-              }`}
-            >
-              Todos
-            </button>
-            {customCategories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => handleSelectCategory(cat.name)}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${
-                  selectedCategory === cat.name
-                    ? 'bg-violet-600/20 border border-violet-500/30 text-white'
-                    : 'bg-zinc-950 border border-zinc-850/80 text-zinc-400 hover:text-white'
-                }`}
-              >
-                {cat.name}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -395,12 +380,21 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
                   </div>
                   
                   {isStaff && (
-                    <button
-                      onClick={() => handleOpenEdit(activeTopic)}
-                      className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 font-medium bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 transition-all"
-                    >
-                      <Edit2 className="w-3 h-3" /> Editar Tema
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                      <button
+                        onClick={() => handleOpenEdit(activeTopic)}
+                        className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 font-medium bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 transition-all cursor-pointer"
+                      >
+                        <Edit2 className="w-3 h-3" /> Editar Tema
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTopic(activeTopic.id)}
+                        className="text-xs text-rose-400 hover:text-white flex items-center gap-1 font-medium bg-rose-950/20 hover:bg-rose-900/40 border border-rose-900/30 rounded-lg px-2 py-1 transition-all cursor-pointer"
+                        title="Eliminar tema permanentemente"
+                      >
+                        <Trash2 className="w-3 h-3" /> Eliminar Tema
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -421,83 +415,83 @@ export default function RecursosBoard({ currentUser, resourceTopics, onRefresh }
               <div className="text-xs leading-relaxed text-slate-300 bg-zinc-950/20 border border-zinc-900/50 rounded-2xl p-4 max-h-[180px] overflow-y-auto whitespace-pre-wrap font-sans">
                 {activeTopic.content}
               </div>
-            </div>
-
-            {/* Forums Debate / Live Chat replies */}
-            <div className="space-y-2 flex-grow flex flex-col justify-between min-h-[220px]">
-              <div className="pb-1 border-b border-white/5 flex items-center justify-between">
-                <span className="text-[10px] font-bold text-zinc-440 font-mono uppercase tracking-wider flex items-center gap-1">
-                  <MessageSquare className="w-3.5 h-3.5 text-zinc-400" /> Debate del Tema
-                </span>
-                {!commentsAllowed && (
-                  <span className="text-[9px] font-bold font-mono text-zinc-500 uppercase flex items-center gap-1 bg-zinc-900/60 p-1 px-2 rounded-lg border border-white/5">
-                    <Lock className="w-3 h-3" /> Solo lectura
+                    {/* Forums Debate / Live Chat replies */}
+            {commentsAllowed && !onlyStaffCanWrite && (
+              <div className="space-y-2 flex-grow flex flex-col justify-between min-h-[220px]">
+                <div className="pb-1 border-b border-white/5 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-440 font-mono uppercase tracking-wider flex items-center gap-1">
+                    <MessageSquare className="w-3.5 h-3.5 text-zinc-400" /> Debate del Tema
                   </span>
-                )}
-              </div>
-
-              {/* Scroll list */}
-              <div className="bg-[#050506] border border-white/[0.03] rounded-2xl p-3 flex-grow max-h-[170px] overflow-y-auto space-y-2 pr-1 select-text">
-                {(!activeTopic.replies || activeTopic.replies.length === 0) ? (
-                  <p className="text-center text-[10px] text-zinc-600 italic py-6">No hay respuestas en este debate. ¡Sé el primero en aportar!</p>
-                ) : (
-                  activeTopic.replies.map((rep) => {
-                    const isRepStaff = ['administrador', 'colaborador', 'moderador'].includes(rep.userRole);
-                    return (
-                      <div id={`res-rep-${rep.id}`} key={rep.id} className="p-2 border border-white/[0.03] bg-zinc-950/35 rounded-xl space-y-1">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-100">{rep.userName}</span>
-                            <span className={`text-[8px] px-1 py-0.2 rounded uppercase font-mono tracking-wider font-bold ${
-                              isRepStaff 
-                                ? 'bg-purple-500/10 border border-purple-500/20 text-purple-400' 
-                                : 'bg-slate-850 text-slate-400'
-                            }`}>
-                              {rep.userRole}
-                            </span>
-                          </div>
-                          <span className="text-[9px] text-zinc-550 font-mono">{new Date(rep.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-350 leading-relaxed font-sans select-text">
-                          {rep.text}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
-                <div ref={commentsEndRef} />
-              </div>
-
-              {/* Chat replies inputs */}
-              {canCommentActive ? (
-                <form onSubmit={handleSendReply} className="flex gap-2 items-center">
-                  <input
-                    id="res-reply-input"
-                    type="text"
-                    placeholder="Aporta al debate sobre este recurso..."
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    disabled={replyLoading}
-                    className="flex-grow bg-zinc-950 border border-zinc-850/80 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-violet-500 font-sans"
-                  />
-                  <button
-                    id="res-reply-submit"
-                    type="submit"
-                    disabled={replyLoading || !replyText.trim()}
-                    className="py-2 px-3 bg-violet-600 hover:bg-violet-500 disabled:bg-violet-600/30 disabled:text-zinc-500 text-white rounded-xl transition-all font-bold flex items-center justify-center gap-1.5 shrink-0"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </button>
-                </form>
-              ) : (
-                <div className="p-2 bg-zinc-900/30 rounded-xl border border-white/5 text-center text-[10px] text-zinc-500 italic font-mono uppercase tracking-wider">
-                  {commentsAllowed 
-                    ? `Comentarios restringidos. Solo cuenta con permisos el rol: ${commentsTarget.toUpperCase()}`
-                    : "El debate ha sido configurado como cerrado de Solo Lectura por el Staff"
-                  }
+                  {!commentsAllowed && (
+                    <span className="text-[9px] font-bold font-mono text-zinc-500 uppercase flex items-center gap-1 bg-zinc-900/60 p-1 px-2 rounded-lg border border-white/5">
+                      <Lock className="w-3 h-3" /> Solo lectura
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
+
+                {/* Scroll list */}
+                <div className="bg-[#050506] border border-white/[0.03] rounded-2xl p-3 flex-grow max-h-[170px] overflow-y-auto space-y-2 pr-1 select-text">
+                  {(!activeTopic.replies || activeTopic.replies.length === 0) ? (
+                    <p className="text-center text-[10px] text-zinc-650 italic py-6">No hay respuestas en este debate. ¡Sé el primero en aportar!</p>
+                  ) : (
+                    activeTopic.replies.map((rep) => {
+                      const isRepStaff = ['administrador', 'colaborador', 'moderador'].includes(rep.userRole);
+                      return (
+                        <div id={`res-rep-${rep.id}`} key={rep.id} className="p-2 border border-white/[0.03] bg-zinc-950/35 rounded-xl space-y-1">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-slate-100">{rep.userName}</span>
+                              <span className={`text-[8px] px-1 py-0.2 rounded uppercase font-mono tracking-wider font-bold ${
+                                isRepStaff 
+                                  ? 'bg-purple-500/10 border border-purple-500/20 text-purple-400' 
+                                  : 'bg-slate-850 text-slate-400'
+                              }`}>
+                                {rep.userRole}
+                              </span>
+                            </div>
+                            <span className="text-[9px] text-zinc-550 font-mono">{new Date(rep.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-350 leading-relaxed font-sans select-text">
+                            {rep.text}
+                          </p>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={commentsEndRef} />
+                </div>
+
+                {/* Chat replies inputs */}
+                {canCommentActive ? (
+                  <form onSubmit={handleSendReply} className="flex gap-2 items-center">
+                    <input
+                      id="res-reply-input"
+                      type="text"
+                      placeholder="Aporta al debate sobre este recurso..."
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      disabled={replyLoading}
+                      className="flex-grow bg-zinc-950 border border-zinc-850/80 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-violet-500 font-sans"
+                    />
+                    <button
+                      id="res-reply-submit"
+                      type="submit"
+                      disabled={replyLoading || !replyText.trim()}
+                      className="py-2 px-3 bg-violet-600 hover:bg-violet-500 disabled:bg-violet-600/30 disabled:text-zinc-500 text-white rounded-xl transition-all font-bold flex items-center justify-center gap-1.5 shrink-0"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                ) : (
+                  <div className="p-2 bg-zinc-900/30 rounded-xl border border-white/5 text-center text-[10px] text-zinc-500 italic font-mono uppercase tracking-wider">
+                    {commentsAllowed 
+                      ? `Comentarios restringidos. Solo cuenta con permisos el rol: ${commentsTarget.toUpperCase()}`
+                      : "El debate ha sido configurado como cerrado de Solo Lectura por el Staff"
+                    }
+                  </div>
+                )}
+              </div>
+            )}        </div>
 
           </div>
         ) : (

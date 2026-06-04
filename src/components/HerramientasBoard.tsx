@@ -54,6 +54,7 @@ export default function HerramientasBoard({
   const [formCommentsAllowed, setFormCommentsAllowed] = useState<boolean>(true);
   const [formCommentsTarget, setFormCommentsTarget] = useState<'todos' | 'alumno' | 'staff'>('todos');
   const [formIsPrivate, setFormIsPrivate] = useState<boolean>(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Discussion reply state
   const [replyText, setReplyText] = useState('');
@@ -207,17 +208,22 @@ export default function HerramientasBoard({
     }
   };
 
-  const handleDeleteTopic = async (topicId: string) => {
-    if (confirm("¿Estás seguro de que deseas eliminar permanentemente esta guía de herramienta y todos sus comentarios?")) {
-      try {
-        await DataAPI.deleteToolTopic(topicId);
-        onRefresh();
-        if (selectedTopicId === topicId) {
-          setSelectedTopicId(null);
-        }
-      } catch (err: any) {
-        alert("Error al eliminar guía: " + (err.message || err));
+  const handleDeleteTopic = (topicId: string) => {
+    setDeleteConfirmId(topicId);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmId) return;
+    try {
+      await DataAPI.deleteToolTopic(deleteConfirmId);
+      onRefresh();
+      if (selectedTopicId === deleteConfirmId) {
+        setSelectedTopicId(null);
       }
+      setDeleteConfirmId(null);
+      setShowUpsertModal(false);
+    } catch (err: any) {
+      alert("Error al eliminar guía: " + (err.message || err));
     }
   };
 
@@ -292,10 +298,10 @@ export default function HerramientasBoard({
         </div>
 
         {/* Main Grid: Left Topics Feed (4 cols) & Right Detail Container (8 cols) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[460px]">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 min-h-[460px]">
           
           {/* Topics Feed list */}
-          <div className="lg:col-span-4 border-r border-white/5 pr-4 space-y-2 overflow-y-auto max-h-[500px]">
+          <div className="md:col-span-4 border-r border-white/5 pr-4 space-y-2 overflow-y-auto max-h-[500px]">
             {filteredTopics.length === 0 ? (
               <p className="text-xs text-zinc-650 italic py-6">No hay recursos ni hilos disponibles en esta categoría.</p>
             ) : (
@@ -384,7 +390,7 @@ export default function HerramientasBoard({
           </div>
 
           {/* Right Selected Topics Pane */}
-          <div className="lg:col-span-8 flex flex-col justify-between pl-2 space-y-4 max-h-[500px]">
+          <div className="md:col-span-8 flex flex-col justify-between pl-2 space-y-4 max-h-[500px]">
             {activeTopic ? (
               <div className="flex flex-col h-full justify-between space-y-4">
                 
@@ -695,23 +701,67 @@ export default function HerramientasBoard({
 
               </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowUpsertModal(false)}
-                  className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold rounded-xl transition-all"
-                >
-                  CANCELAR
-                </button>
-                <button
-                  id="tool-submit"
-                  type="submit"
-                  className="flex-1 py-2.5 bg-pink-600 hover:bg-pink-550 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(236,72,153,0.3)]"
-                >
-                  {editingTopic ? 'GUARDAR CAMBIOS' : 'PUBLICAR TEMA'}
-                </button>
+              <div className="flex justify-between items-center gap-2 pt-2">
+                {editingTopic && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteTopic(editingTopic.id)}
+                    className="py-2.5 px-4 bg-rose-955 hover:bg-rose-900 border border-rose-900/40 text-rose-300 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                  >
+                    ELIMINAR HERRAMIENTA
+                  </button>
+                )}
+                <div className="flex gap-2 flex-grow justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowUpsertModal(false)}
+                    className="py-2.5 px-5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-355 font-bold rounded-xl transition-all"
+                  >
+                    CANCELAR
+                  </button>
+                  <button
+                    id="tool-submit"
+                    type="submit"
+                    className="py-2.5 px-6 bg-pink-600 hover:bg-pink-550 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(236,72,153,0.3)]"
+                  >
+                    {editingTopic ? 'GUARDAR CAMBIOS' : 'PUBLICAR TEMA'}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- CUSTOM CONFIRM DIALOG MODAL --- */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[70] flex items-center justify-center p-4">
+          <div className="bg-[#121214] border border-white/5 rounded-3xl w-full max-w-sm p-6 text-center space-y-4">
+            <div className="flex justify-center">
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-full animate-bounce">
+                <Trash2 className="w-6 h-6" />
+              </div>
+            </div>
+            <h4 className="text-white font-bold text-sm uppercase tracking-wider font-mono">¿CONFIRMAR ELIMINACIÓN?</h4>
+            <p className="text-xs text-slate-305 leading-relaxed font-sans">
+              ¿Estás seguro de que deseas eliminar permanentemente esta guía de herramienta y todos sus datos? Esta operación es irreversible.
+            </p>
+            <div className="flex justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmId(null)}
+                className="flex-1 py-2.5 px-4 bg-white/5 hover:bg-white/10 text-slate-350 border border-white/5 rounded-xl text-xs font-bold cursor-pointer transition-all font-sans"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="flex-1 py-2.5 px-4 bg-rose-650 hover:bg-rose-600 text-white rounded-xl text-xs font-bold cursor-pointer transition-all uppercase font-sans"
+              >
+                SÍ, ELIMINAR
+              </button>
+            </div>
           </div>
         </div>
       )}

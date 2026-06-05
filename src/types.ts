@@ -30,6 +30,8 @@ export interface ChatReply {
   avatarUrl?: string;
   text: string;
   createdAt: string;
+  userId?: string;
+  status?: 'active' | 'pending_review' | 'rejected';
 }
 
 export interface ChatMessage {
@@ -69,6 +71,8 @@ export interface ResourceReply {
   userRole: UserRole;
   text: string;
   createdAt: string;
+  userId?: string;
+  status?: 'active' | 'pending_review' | 'rejected';
 }
 
 export interface ResourceTopic {
@@ -97,6 +101,8 @@ export interface ToolReply {
   userRole: UserRole;
   text: string;
   createdAt: string;
+  userId?: string;
+  status?: 'active' | 'pending_review' | 'rejected';
 }
 
 export interface ToolTopic {

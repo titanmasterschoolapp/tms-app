@@ -262,6 +262,24 @@ export default function RecursosBoard({
     }
   };
 
+  const handleApproveReply = async (topicId: string, replyId: string) => {
+    try {
+      await DataAPI.approveTopicReply(topicId, replyId, 'resource');
+      onRefresh();
+    } catch (e: any) {
+      alert("Error al aprobar comentario: " + (e.message || e));
+    }
+  };
+
+  const handleRejectReply = async (topicId: string, replyId: string) => {
+    try {
+      await DataAPI.rejectTopicReply(topicId, replyId, 'resource');
+      onRefresh();
+    } catch (e: any) {
+      alert("Error al descartar comentario: " + (e.message || e));
+    }
+  };
+
   // Determine commenting permission for active topic
   const commentsAllowed = activeTopic?.commentsAllowed !== false;
   const commentsTarget = activeTopic?.commentsTarget || 'todos';
@@ -458,15 +476,28 @@ export default function RecursosBoard({
 
                 {/* Scroll list */}
                 <div className="bg-[#050506] border border-white/[0.03] rounded-2xl p-3 flex-grow max-h-[170px] overflow-y-auto space-y-2 pr-1 select-text">
-                  {(!activeTopic.replies || activeTopic.replies.length === 0) ? (
-                    <p className="text-center text-[10px] text-zinc-650 italic py-6">No hay respuestas en este debate. ¡Sé el primero en aportar!</p>
-                  ) : (
-                    activeTopic.replies.map((rep) => {
+                  {(() => {
+                    const visibleReplies = (activeTopic.replies || []).filter(rep => {
+                      if (!rep.status || rep.status === 'active') return true;
+                      if (rep.status === 'pending_review') {
+                        return isStaff || rep.userId === currentUser.uid;
+                      }
+                      return false;
+                    });
+
+                    if (visibleReplies.length === 0) {
+                      return <p className="text-center text-[10px] text-zinc-650 italic py-6">No hay respuestas en este debate. ¡Sé el primero en aportar!</p>;
+                    }
+
+                    return visibleReplies.map((rep) => {
                       const isRepStaff = ['administrador', 'colaborador', 'moderador'].includes(rep.userRole);
+                      const isPending = rep.status === 'pending_review';
+                      const isOwn = rep.userId === currentUser.uid;
+
                       return (
-                        <div id={`res-rep-${rep.id}`} key={rep.id} className="p-2 border border-white/[0.03] bg-zinc-950/35 rounded-xl space-y-1">
+                        <div id={`res-rep-${rep.id}`} key={rep.id} className={`p-2 border border-white/[0.03] bg-zinc-950/35 rounded-xl space-y-1 ${isPending ? 'border-amber-500/20 bg-amber-500/[0.01]' : ''}`}>
                           <div className="flex items-center justify-between text-[10px]">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-slate-100">{rep.userName}</span>
                               <span className={`text-[8px] px-1 py-0.2 rounded uppercase font-mono tracking-wider font-bold ${
                                 isRepStaff 
@@ -475,16 +506,39 @@ export default function RecursosBoard({
                               }`}>
                                 {rep.userRole}
                               </span>
+                              {isPending && (
+                                <span className="bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[8px] px-1 py-0.2 rounded font-mono font-bold">
+                                  🕒 En revisión por el equipo de moderación
+                                </span>
+                              )}
                             </div>
                             <span className="text-[9px] text-zinc-550 font-mono">{new Date(rep.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                           <p className="text-[11px] text-slate-350 leading-relaxed font-sans select-text">
                             {rep.text}
                           </p>
+
+                          {/* Action controls for moderator / admin staff */}
+                          {isPending && isStaff && (
+                            <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-white/5 mt-1">
+                              <button 
+                                onClick={() => handleApproveReply(activeTopic.id, rep.id)}
+                                className="px-1.5 py-0.5 bg-green-500/15 hover:bg-green-500/25 border border-green-500/30 text-green-400 rounded text-[9px] font-bold cursor-pointer transition-all"
+                              >
+                                Aprobar
+                              </button>
+                              <button 
+                                onClick={() => handleRejectReply(activeTopic.id, rep.id)}
+                                className="px-1.5 py-0.5 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 rounded text-[9px] font-bold cursor-pointer transition-all"
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
-                    })
-                  )}
+                    });
+                  })()}
                   <div ref={commentsEndRef} />
                 </div>
 

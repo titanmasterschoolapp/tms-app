@@ -445,6 +445,55 @@ const getUpgradedChannels = (): ChatChannel[] => {
   return list;
 };
 
+const checkContentRequiresReview = (text: string, imageUrl?: string, documentUrl?: string): boolean => {
+  const lowercaseText = (text || '').toLowerCase();
+
+  // 1. Image
+  if (imageUrl) return true;
+  if (/\b(?:data:image\/|https?:\/\/.*\.(?:png|jpe?g|gif|webp|bmp|svg))\b/i.test(text)) return true;
+
+  // 2. File / Document
+  if (documentUrl) return true;
+  if (/\b(?:https?:\/\/.*\.(?:pdf|docx?|xlsx?|pptx?|zip|rar|txt|csv|epub))\b/i.test(text)) return true;
+
+  // 3. Link (URL or typical domain formats matches)
+  const urlPattern = /https?:\/\/[^\s]+|www\.[^\s]+/i;
+  const domainPattern = /\b[a-zA-Z0-9-]+\.(com|net|org|es|edu|io|co|us|info|uk|fr|cl|mx|ar|uy|br|de|it|ru|cn|tokyo|xyz|app|online|dev)\b/i;
+  if (urlPattern.test(lowercaseText) || domainPattern.test(lowercaseText)) return true;
+
+  // 4. Phone number
+  const phonePattern = /\b(?:\+?\d{1,4}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b/;
+  const phoneMatch = text.match(phonePattern);
+  if (phoneMatch) {
+    const digitsOnly = phoneMatch[0].replace(/\D/g, '');
+    if (digitsOnly.length >= 7) return true;
+  }
+  const consecutiveDigits = text.replace(/[^\d]/g, '');
+  if (consecutiveDigits.length >= 7 && (text.includes('+') || /[\s.-]/.test(text) || lowercaseText.includes('llamame') || lowercaseText.includes('tel') || lowercaseText.includes('cel'))) {
+    return true;
+  }
+  if (/\b\d{9,12}\b/.test(text)) return true;
+
+  // 5. Email
+  const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i;
+  if (emailPattern.test(text)) return true;
+
+  // 6. External contact info (keywords case-insensitive)
+  const contactKeywords = [
+    'whatsapp', 'telegram', 'discord', 'skype', 'zoom', 'instagram', 'facebook', 
+    'twitter', 'linkedin', 'tiktok', 'mi numero', 'mi número', 'mi tel', 'mi cel', 'mi whatsapp', 
+    'mi telegram', 'mi correo', 'mi email', 'escribeme', 'escríbeme', 'hablame', 
+    'háblame', 'llámame', 'contactame', 'contáctame'
+  ];
+  if (contactKeywords.some(keyword => lowercaseText.includes(keyword))) return true;
+
+  return false;
+};
+
+export const db_helper_checkContentRequiresReview = checkContentRequiresReview;
+
+export { checkContentRequiresReview };
+
 // Unified dynamic data structures and API functions
 export const DataAPI = {
   // ---- AUTHENTICATION ----
@@ -877,17 +926,8 @@ export const DataAPI = {
   },
 
   sendChatMessage: async (text: string, user: UserProfile, chatType: 'alumno' | 'comunidad', channelId?: string, imageUrl?: string, documentUrl?: string, documentName?: string): Promise<void> => {
-    // Check if contains links
-    const checkLinks = (t: string): boolean => {
-      const pattern = /https?:\/\/[^\s]+|www\.[^\s]+/i;
-      const domainPattern = /\b[a-zA-Z0-9-]+\.(com|net|org|es|edu|io|co|us|info|uk|fr|info)\b/i;
-      return pattern.test(t) || domainPattern.test(t);
-    };
-
-    const hasLinks = checkLinks(text);
-    const hasAttachments = !!imageUrl || !!documentUrl;
     const isStaff = ['administrador', 'colaborador', 'moderador'].includes(user.role || '');
-    const requiresReview = (hasLinks || hasAttachments) && !isStaff;
+    const requiresReview = checkContentRequiresReview(text, imageUrl, documentUrl) && !isStaff;
     
     const newMessage: any = {
       id: 'msg_' + Math.random().toString(36).substr(2, 9),
@@ -932,14 +972,25 @@ export const DataAPI = {
 
     // Trigger alerts/notifications to staff if pending review
     if (requiresReview) {
-      const usersList = getLocal<UserProfile[]>('users', []);
+      let usersList: UserProfile[] = [];
+      if (isFirebaseConfigured && db) {
+        try {
+          const snap = await getDocs(collection(db, 'users'));
+          usersList = snap.docs.map(doc => doc.data() as UserProfile);
+        } catch (e) {
+          console.error("Error loading users for staff notify", e);
+        }
+      }
+      if (usersList.length === 0) {
+        usersList = getLocal<UserProfile[]>('users', []);
+      }
+
       const staffList = usersList.filter(u => ['administrador', 'colaborador', 'moderador'].includes(u.role || ''));
       staffList.forEach(s => {
-        const attachmentType = hasLinks ? 'enlaces' : (imageUrl ? 'imágenes' : 'documentos');
         DataAPI.addNotificationForUser(
           s.uid,
           `⚠️ Mensaje retenido en #${channelId || chatType}`,
-          `Mensaje de ${user.displayName} contiene ${attachmentType} y espera aprobación.`,
+          `Mensaje de ${user.displayName} espera aprobación de moderación.`,
           'notice'
         );
       });
@@ -949,12 +1000,24 @@ export const DataAPI = {
     const mentionsPattern = /@([^\s]+)/g;
     const matches = text.match(mentionsPattern);
     if (matches) {
-      const usersList = getLocal<UserProfile[]>('users', []);
+      let usersList: UserProfile[] = [];
+      if (isFirebaseConfigured && db) {
+        try {
+          const snap = await getDocs(collection(db, 'users'));
+          usersList = snap.docs.map(doc => doc.data() as UserProfile);
+        } catch (e) {
+          console.error("Error loading users for mentions", e);
+        }
+      }
+      if (usersList.length === 0) {
+        usersList = getLocal<UserProfile[]>('users', []);
+      }
+
       matches.forEach(m => {
         const target = m.substring(1).toLowerCase();
         usersList.forEach(u => {
           const nameMatch = u.displayName.toLowerCase().replace(/\s+/g, '').includes(target);
-          const roleMatch = u.role.toLowerCase() === target;
+          const roleMatch = u.role ? u.role.toLowerCase() === target : false;
           const globalMatch = target === 'todos' || target === 'comunidad';
           
           if ((nameMatch || roleMatch || globalMatch) && u.uid !== user.uid) {
@@ -1488,37 +1551,57 @@ export const DataAPI = {
       });
     };
 
+    // Get active subchannel IDs to prevent showing old deleted/orphaned subchannels
+    let activeSubChannelIds: string[] = [];
+    try {
+      const subChannels = await DataAPI.getCategorizedSubChannels('pupil_discounts');
+      activeSubChannelIds = subChannels.map(s => s.id);
+    } catch (e) {
+      console.error("Error getting subchannels inside companies filter", e);
+    }
+
     if (isFirebaseConfigured && db) {
       try {
         const snap = await getDocs(collection(db, 'funding_companies'));
-        const list = snap.docs.map(doc => doc.data() as FundingCompany);
+        let list = snap.docs.map(doc => doc.data() as FundingCompany);
+        
+        // Filter out those whose subchannel was deleted
+        list = list.filter(fc => fc.subChannelId && activeSubChannelIds.includes(fc.subChannelId));
+
         const hasSeededFunding = typeof window !== 'undefined' && localStorage.getItem('titan_seeded_funding_companies') === 'true';
         if (list.length === 0 && !hasSeededFunding) {
+          const seeded: FundingCompany[] = [];
           for (const fc of SEED_FUNDING_COMPANIES) {
-            await setDoc(doc(db, 'funding_companies', fc.id), fc);
-            list.push(fc);
+            if (fc.subChannelId && activeSubChannelIds.includes(fc.subChannelId)) {
+              await setDoc(doc(db, 'funding_companies', fc.id), fc);
+              seeded.push(fc);
+            }
           }
           if (typeof window !== 'undefined') {
             localStorage.setItem('titan_seeded_funding_companies', 'true');
           }
+          return sortCompanies(seeded);
         }
         return sortCompanies(list);
       } catch (err) {
         handleFirestoreError(err, OperationType.LIST, 'funding_companies');
-        return sortCompanies(SEED_FUNDING_COMPANIES);
+        return sortCompanies([]);
       }
     } else {
-      const list = getLocal<FundingCompany[]>('funding_companies', []);
+      let list = getLocal<FundingCompany[]>('funding_companies', []);
       // If empty and not seeded, seed once
       const hasSeededFunding = typeof window !== 'undefined' && localStorage.getItem('titan_seeded_funding_companies') === 'true';
       if (list.length === 0 && !hasSeededFunding) {
-        const initial = [...SEED_FUNDING_COMPANIES];
+        const initial = [...SEED_FUNDING_COMPANIES].filter(fc => fc.subChannelId && activeSubChannelIds.includes(fc.subChannelId));
         setLocal('funding_companies', initial);
         if (typeof window !== 'undefined') {
           localStorage.setItem('titan_seeded_funding_companies', 'true');
         }
         return sortCompanies(initial);
       }
+      
+      // Filter list
+      list = list.filter(fc => fc.subChannelId && activeSubChannelIds.includes(fc.subChannelId));
       return sortCompanies(list);
     }
   },
@@ -1851,12 +1934,17 @@ export const DataAPI = {
   },
 
   postResourceTopicReply: async (topicId: string, replyText: string, user: UserProfile): Promise<void> => {
+    const isStaff = ['administrador', 'colaborador', 'moderador'].includes(user.role || '');
+    const requiresReview = checkContentRequiresReview(replyText) && !isStaff;
+
     const reply: ResourceReply = {
       id: 'rep_' + Math.random().toString(36).substr(2, 9),
       userName: user.displayName,
       userRole: user.role,
       text: replyText,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      userId: user.uid,
+      status: requiresReview ? 'pending_review' : 'active'
     };
 
     if (isFirebaseConfigured && db) {
@@ -1884,15 +1972,27 @@ export const DataAPI = {
         window.dispatchEvent(new Event('storage'));
       }
     }
+
+    if (requiresReview) {
+      await DataAPI.notifyModerators(
+        '⚠️ Comentario pendiente de aprobación',
+        `Un nuevo comentario en Recursos de ${user.displayName} requiere revisión.`
+      );
+    }
   },
 
   postToolTopicReply: async (topicId: string, replyText: string, user: UserProfile): Promise<void> => {
+    const isStaff = ['administrador', 'colaborador', 'moderador'].includes(user.role || '');
+    const requiresReview = checkContentRequiresReview(replyText) && !isStaff;
+
     const reply: ToolReply = {
       id: 'rep_' + Math.random().toString(36).substr(2, 9),
       userName: user.displayName,
       userRole: user.role,
       text: replyText,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      userId: user.uid,
+      status: requiresReview ? 'pending_review' : 'active'
     };
 
     if (isFirebaseConfigured && db) {
@@ -1919,6 +2019,102 @@ export const DataAPI = {
         setLocal('tool_topics', topics);
         window.dispatchEvent(new Event('storage'));
       }
+    }
+
+    if (requiresReview) {
+      await DataAPI.notifyModerators(
+        '⚠️ Comentario pendiente de aprobación',
+        `Un nuevo comentario en Soporte de Herramientas de ${user.displayName} requiere revisión.`
+      );
+    }
+  },
+
+  approveTopicReply: async (topicId: string, replyId: string, type: 'resource' | 'tool'): Promise<void> => {
+    const colName = type === 'resource' ? 'resource_topics' : 'tool_topics';
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, colName, topicId);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          const replies = data.replies || [];
+          const idx = replies.findIndex((r: any) => r.id === replyId);
+          if (idx !== -1) {
+            replies[idx].status = 'active';
+            await updateDoc(docRef, { replies });
+          }
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `${colName}/${topicId}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<any[]>(colName, type === 'resource' ? SEED_RESOURCE_TOPICS : SEED_TOOL_TOPICS);
+      const idx = list.findIndex(t => t.id === topicId);
+      if (idx !== -1) {
+        const replies = list[idx].replies || [];
+        const rIdx = replies.findIndex((r: any) => r.id === replyId);
+        if (rIdx !== -1) {
+          replies[rIdx].status = 'active';
+          list[idx].replies = replies;
+          setLocal(colName, list);
+          window.dispatchEvent(new Event('storage'));
+        }
+      }
+    }
+  },
+
+  rejectTopicReply: async (topicId: string, replyId: string, type: 'resource' | 'tool'): Promise<void> => {
+    const colName = type === 'resource' ? 'resource_topics' : 'tool_topics';
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, colName, topicId);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          const replies = (data.replies || []).filter((r: any) => r.id !== replyId);
+          await updateDoc(docRef, { replies });
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `${colName}/${topicId}`);
+        throw err;
+      }
+    } else {
+      const list = getLocal<any[]>(colName, type === 'resource' ? SEED_RESOURCE_TOPICS : SEED_TOOL_TOPICS);
+      const idx = list.findIndex(t => t.id === topicId);
+      if (idx !== -1) {
+        const replies = (list[idx].replies || []).filter((r: any) => r.id !== replyId);
+        list[idx].replies = replies;
+        setLocal(colName, list);
+        window.dispatchEvent(new Event('storage'));
+      }
+    }
+  },
+
+  notifyModerators: async (title: string, content: string): Promise<void> => {
+    try {
+      let usersList: UserProfile[] = [];
+      if (isFirebaseConfigured && db) {
+        try {
+          const snap = await getDocs(collection(db, 'users'));
+          usersList = snap.docs.map(doc => doc.data() as UserProfile);
+        } catch (e) {
+          console.error("Error loading users for notify", e);
+        }
+      }
+      if (usersList.length === 0) {
+        usersList = getLocal<UserProfile[]>('users', []);
+      }
+
+      const staffUserIds = usersList
+        .filter(u => ['administrador', 'colaborador', 'moderador'].includes(u.role || ''))
+        .map(u => u.uid);
+
+      for (const staffId of staffUserIds) {
+        DataAPI.addNotificationForUser(staffId, title, content, 'notice');
+      }
+    } catch (e) {
+      console.error("Error notifying moderators", e);
     }
   },
 
@@ -2097,6 +2293,16 @@ export const DataAPI = {
     if (isFirebaseConfigured && db) {
       try {
         await deleteDoc(doc(db, 'categorized_subchannels', id));
+        
+        // Cascade delete coupon
+        try {
+          await deleteDoc(doc(db, 'categorized_coupons', id));
+        } catch (e) {}
+
+        // Cascade delete funding company
+        try {
+          await deleteDoc(doc(db, 'funding_companies', id));
+        } catch (e) {}
       } catch (err) {
         handleFirestoreError(err, OperationType.DELETE, `categorized_subchannels/${id}`);
         throw err;
@@ -2105,6 +2311,17 @@ export const DataAPI = {
       const list = getLocal<CategorizedSubChannel[]>('categorized_subchannels', DEFAULT_CATEGORIZED_SUBCHANNELS);
       const filtered = list.filter(c => c.id !== id);
       setLocal('categorized_subchannels', filtered);
+
+      // Cascade delete coupon
+      const cpList = getLocal<CategorizedCoupon[]>('categorized_coupons', DEFAULT_CATEGORIZED_COUPONS);
+      const filteredCp = cpList.filter(c => c.id !== id && c.subChannelId !== id);
+      setLocal('categorized_coupons', filteredCp);
+
+      // Cascade delete funding company
+      const fcList = getLocal<FundingCompany[]>('funding_companies', SEED_FUNDING_COMPANIES);
+      const filteredFc = fcList.filter(f => f.id !== id && f.subChannelId !== id);
+      setLocal('funding_companies', filteredFc);
+
       window.dispatchEvent(new Event('storage'));
     }
   },

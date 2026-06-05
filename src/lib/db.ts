@@ -283,16 +283,35 @@ const SEED_STRATEGIES_HISTORICAL: StrategyHistorical[] = [
 const SEED_TOOLS: TradingTool[] = [
   {
     id: 't1',
-    name: 'Calculadora de Lotes Titan',
-    description: 'Herramienta interactiva para calcular el tamaño exacto del lote basándose en el balance, porcentaje de riesgo de la cuenta y la distancia del Stop Loss en pips.',
+    name: 'Calculadora de Riesgo',
+    description: 'Calcula automáticamente el tamaño de posición según el riesgo definido.',
     link: '#lot-calculator',
+    type: 'riesgo',
+    icon: 'Percent',
+    hidden: false,
+    orderIndex: 0,
     createdAt: new Date().toISOString()
   },
   {
     id: 't2',
+    name: 'Calculadora de Apalancamiento',
+    description: 'Calcula tu apalancamiento efectivo, margen requerido y valor del pip según el lote y activo.',
+    link: '#leverage-calculator',
+    type: 'apalancamiento',
+    icon: 'Activity',
+    hidden: false,
+    orderIndex: 1,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 't3',
     name: 'Bitácora de Trading automatizada (Excel Premium)',
     description: 'Descarga nuestra plantilla de Excel optimizada para llevar un registro profesional de tus operaciones, estadísticas de winrate, profit factor, ratio R:R y análisis emocional.',
     link: 'https://docs.google.com/spreadsheets/d/test-excel-titan/copy',
+    type: 'enlace',
+    icon: 'BookOpen',
+    hidden: false,
+    orderIndex: 2,
     createdAt: new Date().toISOString()
   }
 ];

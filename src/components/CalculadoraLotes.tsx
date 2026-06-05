@@ -6,7 +6,13 @@
 import { useState } from 'react';
 import { Percent, Wallet, ArrowRight, ShieldAlert, FileSliders, ChevronDown, ChevronRight } from 'lucide-react';
 
-export default function CalculadoraLotes() {
+interface CalculadoraLotesProps {
+  key?: any;
+  title?: string;
+  description?: string;
+}
+
+export default function CalculadoraLotes({ title, description }: CalculadoraLotesProps) {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [balance, setBalance] = useState<number>(10000);
   const [riskPercent, setRiskPercent] = useState<number>(1);
@@ -39,9 +45,9 @@ export default function CalculadoraLotes() {
           <div>
             <h3 className="font-sans font-semibold text-lg text-white group-hover:text-violet-400 transition-colors flex items-center gap-2">
               {isOpen ? <ChevronDown className="w-4 h-4 text-purple-400" /> : <ChevronRight className="w-4 h-4 text-purple-400" />}
-              Calculadora de Lotaje
+              {title || "Calculadora de Lotaje"}
             </h3>
-            <p className="text-xs text-zinc-400 font-mono">GESTIÓN DE RIESGO PROFESIONAL</p>
+            <p className="text-xs text-zinc-400 font-mono text-left">{description || "GESTIÓN DE RIESGO PROFESIONAL"}</p>
           </div>
         </div>
       </button>

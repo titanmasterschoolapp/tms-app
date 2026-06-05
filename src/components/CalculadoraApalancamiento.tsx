@@ -27,7 +27,13 @@ const FUTURE_ASSETS: FutureAssetDef[] = [
   { id: 'MRTY', name: 'MRTY', fullName: 'Micro Russell 2000', pointValue: 5, tickSize: 0.1, tickValue: 0.5, typicalDayMargin: 100 }
 ];
 
-export default function CalculadoraApalancamiento() {
+interface CalculadoraApalancamientoProps {
+  key?: any;
+  title?: string;
+  description?: string;
+}
+
+export default function CalculadoraApalancamiento({ title, description }: CalculadoraApalancamientoProps) {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [selectedAssetId, setSelectedAssetId] = useState<string>('MNQ');
   const [balance, setBalance] = useState<number>(10000);
@@ -73,9 +79,9 @@ export default function CalculadoraApalancamiento() {
           <div>
             <h3 className="font-sans font-semibold text-lg text-white group-hover:text-pink-400 transition-colors flex items-center gap-2">
               {isOpen ? <ChevronDown className="w-4 h-4 text-pink-400" /> : <ChevronRight className="w-4 h-4 text-pink-400" />}
-              Calculadora de Riesgo
+              {title || "Calculadora de Riesgo"}
             </h3>
-            <p className="text-xs text-zinc-400 font-mono font-medium tracking-wider">CÁLCULO EXCLUSIVO DE RIESGO CME EN TIEMPO REAL</p>
+            <p className="text-xs text-zinc-400 font-mono font-medium tracking-wider text-left">{description || "CÁLCULO EXCLUSIVO DE RIESGO CME EN TIEMPO REAL"}</p>
           </div>
         </div>
       </button>

@@ -79,6 +79,7 @@ export interface ResourceTopic {
   createdAt: string;
   isReleased?: boolean;
   releasedTo?: 'todos' | 'alumno' | 'miembro' | 'staff';
+  allowedRoles?: UserRole[];
   replies?: ResourceReply[];
   
   // Dynamic controls
@@ -106,6 +107,7 @@ export interface ToolTopic {
   createdAt: string;
   isReleased?: boolean;
   releasedTo?: 'todos' | 'alumno' | 'miembro' | 'staff';
+  allowedRoles?: UserRole[];
   replies?: ToolReply[];
 
   // Dynamic controls
@@ -181,6 +183,10 @@ export interface TradingTool {
   description: string;
   link: string;
   createdAt: string;
+  type?: 'riesgo' | 'apalancamiento' | 'enlace';
+  icon?: string;
+  hidden?: boolean;
+  orderIndex?: number;
 }
 
 export interface DiscountRef {

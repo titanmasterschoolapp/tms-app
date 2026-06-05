@@ -4,12 +4,13 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import * as LucideIcons from 'lucide-react';
 import { 
   Wrench, Plus, Trash2, Edit2, Send, MessageSquare, 
   Check, Eye, EyeOff, User, Clock, Lock, ShieldAlert,
   X, Pin, ArrowUp, ArrowDown
 } from 'lucide-react';
-import { ToolTopic, UserProfile, CustomCategory } from '../types';
+import { ToolTopic, UserProfile, CustomCategory, TradingTool } from '../types';
 import { DataAPI } from '../lib/db';
 import CalculadoraLotes from './CalculadoraLotes';
 import CalculadoraApalancamiento from './CalculadoraApalancamiento';
@@ -59,14 +60,22 @@ export default function HerramientasBoard({
   // Discussion reply state
   const [replyText, setReplyText] = useState('');
   const [replyLoading, setReplyLoading] = useState(false);
+  const [tradingTools, setTradingTools] = useState<TradingTool[]>([]);
 
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
-  // Load Categories on mount & topics change
+  const loadTools = () => {
+    DataAPI.getTools().then(list => {
+      setTradingTools(list);
+    }).catch(console.error);
+  };
+
+  // Load Categories & Tools on mount & topics change
   useEffect(() => {
     DataAPI.getCustomCategories().then(list => {
       setCustomCategories(list);
     }).catch(console.error);
+    loadTools();
   }, [toolTopics]);
 
   // Filter topics based on permissions
@@ -268,25 +277,97 @@ export default function HerramientasBoard({
     canCommentActive = isStaff;
   }
 
+  const renderToolIcon = (iconName?: string) => {
+    const Name = iconName || 'Percent';
+    const IconComp = (LucideIcons as any)[Name] || LucideIcons.Wrench;
+    return <IconComp className="w-5 h-5 text-purple-400" />;
+  };
+
   // If role is NONE (pendiene de aprobación), return restricted calculators only as specified in section 3
   if (isSinRol) {
+    const sortedTradingTools = [...tradingTools]
+      .filter(t => !t.hidden)
+      .sort((a,b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+
     return (
-      <div id="herramientas-main-board" className="space-y-6 animate-fade-in">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
-          <CalculadoraLotes />
-          <CalculadoraApalancamiento />
+      <div id="herramientas-main-board" className="space-y-6 animate-fade-in text-left">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
+          {sortedTradingTools.map(t => {
+            if (t.type === 'riesgo') {
+              return <CalculadoraLotes key={t.id} title={t.name} description={t.description} />;
+            }
+            if (t.type === 'apalancamiento') {
+              return <CalculadoraApalancamiento key={t.id} title={t.name} description={t.description} />;
+            }
+            return (
+              <div key={t.id} className="p-5 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-3 bg-zinc-950 rounded-xl border border-white/5 shrink-0">
+                    {renderToolIcon(t.icon)}
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-bold text-white truncate text-left">{t.name}</h4>
+                    <p className="text-xs text-zinc-400 mt-1 line-clamp-2 text-left">{t.description}</p>
+                  </div>
+                </div>
+                {t.link && (
+                  <a
+                    href={t.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2 px-3 bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/15 rounded-xl text-xs font-bold font-sans transition-all shrink-0 cursor-pointer text-center"
+                  >
+                    Acceder
+                  </a>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
   }
 
+  const sortedTradingTools = [...tradingTools]
+    .filter(t => !t.hidden)
+    .sort((a,b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+
   return (
-    <div id="herramientas-main-board" className="space-y-8">
+    <div id="herramientas-main-board" className="space-y-8 text-left">
       
       {/* 2 COLLAPSIBLE ACCORDION CALCULATORS GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CalculadoraLotes />
-        <CalculadoraApalancamiento />
+        {sortedTradingTools.map(t => {
+          if (t.type === 'riesgo') {
+            return <CalculadoraLotes key={t.id} title={t.name} description={t.description} />;
+          }
+          if (t.type === 'apalancamiento') {
+            return <CalculadoraApalancamiento key={t.id} title={t.name} description={t.description} />;
+          }
+          return (
+            <div key={t.id} className="p-5 bg-[#0A0A0B]/60 backdrop-blur-md border border-white/5 rounded-2xl flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-3 bg-zinc-950 rounded-xl border border-white/5 shrink-0">
+                  {renderToolIcon(t.icon)}
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-bold text-white truncate text-left">{t.name}</h4>
+                  <p className="text-xs text-zinc-400 mt-1 line-clamp-2 text-left">{t.description}</p>
+                </div>
+              </div>
+              {t.link && (
+                <a
+                  href={t.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2 px-3 bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/10 rounded-xl text-xs font-bold font-sans transition-all shrink-0 cursor-pointer text-center"
+                >
+                  Acceder
+                </a>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* COMPONENT: ADMINISTRABLE 'Herramientas y Recursos' SECTION */}

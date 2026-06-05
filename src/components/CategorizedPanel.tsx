@@ -1431,6 +1431,7 @@ export default function CategorizedPanel({ parentChannel, currentUser, onRefresh
                     { val: 'alumno', label: 'Alumno' },
                     { val: 'miembro', label: 'Miembro' },
                     { val: 'veterano', label: 'Veterano' },
+                    { val: 'old_school', label: 'Old School' },
                     { val: 'moderador', label: 'Moderador' },
                     { val: 'colaborador', label: 'Colaborador' },
                     { val: 'administrador', label: 'Administrador' }

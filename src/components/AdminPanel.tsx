@@ -24,6 +24,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Pin,
+  Edit2,
   Edit3,
   Settings
 } from 'lucide-react';
@@ -72,7 +73,8 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
   // Form states
   const [meetingForm, setMeetingForm] = useState<Partial<Meeting>>({ title: '', date: '', time: '', link: '', type: 'alumno' });
   const [noticeForm, setNoticeForm] = useState<Partial<Notice>>({ title: '', content: '', urgent: false });
-  const [toolForm, setToolForm] = useState<Partial<TradingTool>>({ name: '', description: '', link: '' });
+  const [toolForm, setToolForm] = useState<Partial<TradingTool>>({ name: '', description: '', link: '', type: 'enlace', icon: 'Percent', hidden: false, orderIndex: 0 });
+  const [editingToolId, setEditingToolId] = useState<string | null>(null);
   const [discountForm, setDiscountForm] = useState<Partial<DiscountRef>>({ name: '', description: '', link: '', category: 'fondeo', code: '' });
   const [hallForm, setHallForm] = useState<Partial<HallOfFameEntry>>({ studentName: '', title: '', description: '', result: '', date: '', prize: '' });
   const [featuredForm, setFeaturedForm] = useState<Partial<StrategyFeatured>>({ id: '', name: '', description: '', parameters: '', author: '', comments: '', orderIndex: 0, pinned: false, requiredMonths: 0 });
@@ -438,24 +440,53 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
   // Basic Tools Form Submiter
   const handleSaveTool = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!toolForm.name || !toolForm.description || !toolForm.link) return;
+    if (!toolForm.name || !toolForm.description) return;
+    const isEditing = !!editingToolId;
     const final: TradingTool = {
-      id: 'tool_' + Math.random().toString(36).substr(2, 9),
+      id: isEditing ? editingToolId! : 'tool_' + Math.random().toString(36).substr(2, 9),
       name: toolForm.name,
       description: toolForm.description,
-      link: toolForm.link,
-      createdAt: new Date().toISOString()
+      link: toolForm.link || '',
+      type: toolForm.type || 'enlace',
+      icon: toolForm.icon || 'Percent',
+      hidden: toolForm.hidden || false,
+      orderIndex: Number(toolForm.orderIndex || 0),
+      createdAt: toolForm.createdAt || new Date().toISOString()
     };
     await DataAPI.saveTool(final);
-    setToolForm({ name: '', description: '', link: '' });
-    triggerToast("Herramienta académica agregada.");
+    setToolForm({ name: '', description: '', link: '', type: 'enlace', icon: 'Percent', hidden: false, orderIndex: 0 });
+    setEditingToolId(null);
+    triggerToast(isEditing ? "Herramienta académica actualizada." : "Herramienta académica agregada.");
     loadAllData();
+  };
+
+  const handleStartEditTool = (tool: TradingTool) => {
+    setEditingToolId(tool.id);
+    setToolForm({
+      name: tool.name,
+      description: tool.description,
+      link: tool.link,
+      type: tool.type || 'enlace',
+      icon: tool.icon || 'Percent',
+      hidden: tool.hidden || false,
+      orderIndex: tool.orderIndex || 0,
+      createdAt: tool.createdAt
+    });
+  };
+
+  const handleCancelEditTool = () => {
+    setEditingToolId(null);
+    setToolForm({ name: '', description: '', link: '', type: 'enlace', icon: 'Percent', hidden: false, orderIndex: 0 });
   };
 
   const handleDeleteTool = async (id: string) => {
     if (confirm("¿Estás seguro de que deseas eliminar esta herramienta académica?")) {
       await DataAPI.deleteTool(id);
       triggerToast("Herramienta removida.");
+      if (editingToolId === id) {
+        setEditingToolId(null);
+        setToolForm({ name: '', description: '', link: '', type: 'enlace', icon: 'Percent', hidden: false, orderIndex: 0 });
+      }
       loadAllData();
     }
   };
@@ -1229,48 +1260,134 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
           <div className="space-y-6">
             
             {/* Form Tools */}
-            <div className="bg-zinc-900/20 border border-zinc-850 p-5 rounded-2xl space-y-4">
+            <div className="bg-zinc-900/20 border border-zinc-855 p-5 rounded-2xl space-y-4 text-left">
               <h3 className="text-xs font-sans font-bold text-white uppercase tracking-wider font-mono">Herramientas Básicas Estudiantes</h3>
               <form onSubmit={handleSaveTool} className="space-y-2 text-xs">
-                <input
-                  id="tool-form-name"
-                  type="text"
-                  placeholder="Nombre de la Herramienta (Ej: TradingView Indicator)"
-                  value={toolForm.name}
-                  onChange={(e) => setToolForm({ ...toolForm, name: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white"
-                />
-                <input
-                  id="tool-form-desc"
-                  type="text"
-                  placeholder="Pequeña descripción"
-                  value={toolForm.description}
-                  onChange={(e) => setToolForm({ ...toolForm, description: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white"
-                />
-                <input
-                  id="tool-form-link"
-                  type="url"
-                  placeholder="Enlace de descarga o hoja de cálculo"
-                  value={toolForm.link}
-                  onChange={(e) => setToolForm({ ...toolForm, link: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white font-mono"
-                />
-                <button id="tool-submit-btn" type="submit" className="w-full py-2 bg-violet-600/20 hover:bg-violet-600/35 text-violet-400 font-bold border border-violet-500/20 rounded-lg text-xs">
-                  AGREGAR HERRAMIENTA
-                </button>
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-mono uppercase font-bold block mb-1">Nombre</label>
+                  <input
+                    id="tool-form-name"
+                    type="text"
+                    required
+                    placeholder="Nombre (Ej: Calculadora de Riesgo)"
+                    value={toolForm.name || ''}
+                    onChange={(e) => setToolForm({ ...toolForm, name: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-mono uppercase font-bold block mb-1">Descripción</label>
+                  <input
+                    id="tool-form-desc"
+                    type="text"
+                    required
+                    placeholder="Descripción de la herramienta"
+                    value={toolForm.description || ''}
+                    onChange={(e) => setToolForm({ ...toolForm, description: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-zinc-400 font-mono uppercase font-bold block mb-1">Tipo de Herramienta</label>
+                    <select
+                      value={toolForm.type || 'enlace'}
+                      onChange={(e) => setToolForm({ ...toolForm, type: e.target.value as any })}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-white"
+                    >
+                      <option value="enlace">Enlace Estático / Descarga</option>
+                      <option value="riesgo">Calculadora de Riesgo / Lotes</option>
+                      <option value="apalancamiento">Calculadora de Apalancamiento</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-zinc-400 font-mono uppercase font-bold block mb-1">Icono Lucide</label>
+                    <select
+                      value={toolForm.icon || 'Percent'}
+                      onChange={(e) => setToolForm({ ...toolForm, icon: e.target.value })}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-white font-mono"
+                    >
+                      <option value="Percent">Porcentaje (%)</option>
+                      <option value="Activity">Actividad (Seno/Cos)</option>
+                      <option value="Calculator">Calculadora</option>
+                      <option value="Wrench">Herramienta</option>
+                      <option value="Zap">Rayo</option>
+                      <option value="BookOpen">Libro Abierto</option>
+                      <option value="TrendingUp">Gráfico Sube</option>
+                      <option value="Coins">Monedas</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-mono uppercase font-bold block mb-1">Enlace (Opcional para calculadoras)</label>
+                  <input
+                    id="tool-form-link"
+                    type="text"
+                    placeholder="https://..."
+                    value={toolForm.link || ''}
+                    onChange={(e) => setToolForm({ ...toolForm, link: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white font-mono"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 py-1">
+                  <div>
+                    <label className="text-[10px] text-zinc-400 font-mono uppercase font-bold block mb-1">Orden Posición</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={toolForm.orderIndex || 0}
+                      onChange={(e) => setToolForm({ ...toolForm, orderIndex: Number(e.target.value) })}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-white font-mono"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 pl-2 mt-4 select-none cursor-pointer">
+                    <input
+                      type="checkbox"
+                      id="tool-form-hidden"
+                      checked={!!toolForm.hidden}
+                      onChange={(e) => setToolForm({ ...toolForm, hidden: e.target.checked })}
+                      className="accent-purple-500 rounded scale-90"
+                    />
+                    <label htmlFor="tool-form-hidden" className="text-[11px] text-zinc-300 font-semibold cursor-pointer">Ocultar herramienta</label>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-1 border-t border-white/5">
+                  {editingToolId && (
+                    <button
+                      type="button"
+                      onClick={handleCancelEditTool}
+                      className="flex-1 py-2 bg-zinc-850 hover:bg-zinc-800 text-zinc-300 font-bold rounded-lg text-xs cursor-pointer"
+                    >
+                      CANCELAR
+                    </button>
+                  )}
+                  <button id="tool-submit-btn" type="submit" className="flex-[2] py-2 bg-violet-600/20 hover:bg-violet-600/35 text-violet-400 font-bold border border-violet-500/20 rounded-lg text-xs cursor-pointer">
+                    {editingToolId ? "ACTUALIZAR HERRAMIENTA" : "AGREGAR HERRAMIENTA"}
+                  </button>
+                </div>
               </form>
 
-              <div className="space-y-2">
-                {toolsList.map((t) => (
-                  <div id={`tool-el-${t.id}`} key={t.id} className="p-2.5 bg-zinc-950/40 border border-zinc-850 rounded-lg flex items-center justify-between text-xs">
-                    <div>
-                      <span className="font-bold text-white block">{t.name}</span>
-                      <span className="text-[10px] text-zinc-500 font-mono truncate max-w-xs block">{t.link}</span>
+              <div className="space-y-2 pt-2">
+                {[...toolsList].sort((a,b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)).map((t) => (
+                  <div id={`tool-el-${t.id}`} key={t.id} className="p-3 bg-zinc-950/40 border border-zinc-850 rounded-xl flex items-center justify-between text-xs">
+                    <div className="min-w-0 pr-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-white truncate text-left">{t.name}</span>
+                        {t.hidden && <span className="bg-zinc-800 text-zinc-400 text-[8px] font-mono px-1.5 py-0.5 rounded">OCUPADO/OCULTO</span>}
+                        {t.type && t.type !== 'enlace' && <span className="bg-purple-950 text-purple-400 text-[8px] font-mono px-1.5 py-0.5 rounded font-bold uppercase">{t.type}</span>}
+                      </div>
+                      <span className="text-[10px] text-zinc-450 block truncate max-w-xs mb-0.5 text-left">{t.description}</span>
+                      <span className="text-[9px] text-zinc-650 font-mono block truncate max-w-xs text-left">{t.link || 'Sin enlace (Calculadora)'}</span>
                     </div>
-                    <button id={`delete-tool-${t.id}`} onClick={() => handleDeleteTool(t.id)} className="text-zinc-500 hover:text-red-400">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => handleStartEditTool(t)} className="text-zinc-400 hover:text-violet-400 p-1">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button id={`delete-tool-${t.id}`} onClick={() => handleDeleteTool(t.id)} className="text-zinc-500 hover:text-red-400 p-1">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

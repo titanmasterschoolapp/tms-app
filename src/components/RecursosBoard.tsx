@@ -42,6 +42,7 @@ export default function RecursosBoard({
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [formReleasedTo, setFormReleasedTo] = useState<'todos' | 'alumno' | 'miembro' | 'staff'>('todos');
+  const [formAllowedRoles, setFormAllowedRoles] = useState<UserRole[]>([]);
   const [formIsReleased, setFormIsReleased] = useState(true);
   
   // New configuration options
@@ -78,11 +79,15 @@ export default function RecursosBoard({
     if (!isReleased) return false;
 
     // Check rank/role requirement
-    const target = t.releasedTo || 'todos';
-    if (target === 'todos') return true;
-    if (target === 'alumno') return ['alumno', 'miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role);
-    if (target === 'miembro') return ['miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role);
-    if (target === 'staff') return ['moderador', 'colaborador', 'administrador'].includes(currentUser.role);
+    if (t.allowedRoles && t.allowedRoles.length > 0) {
+      if (!t.allowedRoles.includes(currentUser.role || 'none')) return false;
+    } else {
+      const target = t.releasedTo || 'todos';
+      if (target === 'todos') return true;
+      if (target === 'alumno') return ['alumno', 'miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role || 'none');
+      if (target === 'miembro') return ['miembro', 'veterano', 'old_school', 'moderador', 'colaborador', 'administrador'].includes(currentUser.role || 'none');
+      if (target === 'staff') return ['moderador', 'colaborador', 'administrador'].includes(currentUser.role || 'none');
+    }
     
     return true;
   });
@@ -154,6 +159,7 @@ export default function RecursosBoard({
     setFormTitle('');
     setFormContent('');
     setFormReleasedTo('todos');
+    setFormAllowedRoles([]);
     setFormIsReleased(true);
     setFormCategory(channelId || '');
     setFormPinned(false);
@@ -169,6 +175,7 @@ export default function RecursosBoard({
     setFormTitle(topic.title);
     setFormContent(topic.content);
     setFormReleasedTo(topic.releasedTo || 'todos');
+    setFormAllowedRoles(topic.allowedRoles || []);
     setFormIsReleased(topic.isReleased !== false);
     setFormCategory(topic.category || '');
     setFormPinned(topic.pinned || false);
@@ -198,6 +205,7 @@ export default function RecursosBoard({
         createdAt: editingTopic ? editingTopic.createdAt : new Date().toISOString(),
         isReleased: formIsReleased,
         releasedTo: formReleasedTo,
+        allowedRoles: formAllowedRoles,
         replies: editingTopic ? editingTopic.replies : [],
         category: formCategory,
         pinned: formPinned,
@@ -648,18 +656,38 @@ export default function RecursosBoard({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-white/5 pt-3">
                   <div>
-                    <label className="block text-zinc-400 text-[10px] font-medium mb-1 font-mono uppercase tracking-wider">Liberar a Rango / Rol</label>
-                    <select
-                      id="resource-select-role"
-                      value={formReleasedTo}
-                      onChange={(e) => setFormReleasedTo(e.target.value as any)}
-                      className="w-full bg-zinc-950 border border-zinc-855 rounded-lg p-2 text-white font-mono text-[11px]"
-                    >
-                      <option value="todos">Todos (Visibilidad global)</option>
-                      <option value="alumno">Rol Alumno en adelante</option>
-                      <option value="miembro">Solo Miembros de la Comunidad</option>
-                      <option value="staff">Solo Staff</option>
-                    </select>
+                    <label className="block text-zinc-400 text-[10px] font-medium mb-1.5 font-mono uppercase tracking-wider">Permisos de Acceso (Nada seleccionado = Público/Todos)</label>
+                    <div className="grid grid-cols-2 gap-1.5 bg-[#0A0A0B]/50 p-2.5 rounded-xl border border-white/5 text-left text-xs text-zinc-300">
+                      {[
+                        { val: 'none', label: 'Sin rol' },
+                        { val: 'alumno', label: 'Alumno' },
+                        { val: 'miembro', label: 'Miembro' },
+                        { val: 'veterano', label: 'Veterano' },
+                        { val: 'old_school', label: 'Old School' },
+                        { val: 'moderador', label: 'Moderador' },
+                        { val: 'colaborador', label: 'Colaborador' },
+                        { val: 'administrador', label: 'Administrador' }
+                      ].map((robj) => {
+                        const isChecked = formAllowedRoles.includes(robj.val as any);
+                        return (
+                          <label key={robj.val} className="flex items-center gap-1.5 cursor-pointer py-0.5 hover:text-white transition-colors select-none text-[11px]">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setFormAllowedRoles(formAllowedRoles.filter(r => r !== robj.val));
+                                } else {
+                                  setFormAllowedRoles([...formAllowedRoles, robj.val as any]);
+                                }
+                              }}
+                              className="accent-purple-500 rounded scale-90 shrink-0"
+                            />
+                            <span>{robj.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">

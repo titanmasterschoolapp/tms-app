@@ -440,12 +440,9 @@ export default function App() {
     };
   }, [user, activeView]);
 
-  // Reset scroll to top on active section changes except for chats/interactive streams (Requirement 5)
+  // Reset scroll to top on active section changes as requested
   useEffect(() => {
-    const isInteractiveView = activeView === 'pupil_chat' || activeView === 'community_chat' || activeView.includes('chat') || activeView.includes('hilo') || activeView.includes('thread');
-    if (!isInteractiveView) {
-      window.scrollTo({ top: 0, behavior: 'instant' });
-    }
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }, [activeView]);
 
   // Auth Operations

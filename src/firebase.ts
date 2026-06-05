@@ -6,6 +6,7 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const isFirebaseConfigured = !!(
@@ -18,6 +19,7 @@ const isFirebaseConfigured = !!(
 let app: any = null;
 let db: any = null;
 let auth: any = null;
+let storage: any = null;
 
 if (isFirebaseConfigured) {
   try {
@@ -34,9 +36,10 @@ if (isFirebaseConfigured) {
 
     db = getFirestore(app, firestoreDatabaseId);
     auth = getAuth(app);
+    storage = getStorage(app);
   } catch (error) {
     console.error("Firebase initialization failed dynamically", error);
   }
 }
 
-export { app, db, auth, isFirebaseConfigured };
+export { app, db, auth, storage, isFirebaseConfigured };

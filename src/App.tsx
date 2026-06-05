@@ -68,6 +68,7 @@ import {
 } from './types';
 import { DataAPI, DEFAULT_DASHBOARD_TEXTS } from './lib/db';
 import { isFirebaseConfigured } from './firebase';
+import { optimizeAndUploadAvatar } from './lib/imageOptimizer';
 
 import CalculadoraLotes from './components/CalculadoraLotes';
 import CalculadoraApalancamiento from './components/CalculadoraApalancamiento';
@@ -128,19 +129,23 @@ export default function App() {
   const [profileAvatarInput, setProfileAvatarInput] = useState('');
   const profileFileRef = React.useRef<HTMLInputElement>(null);
   const [profileDragActive, setProfileDragActive] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
-  const handleProfileImageUpload = (file: File) => {
+  const handleProfileImageUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Por favor selecciona una imagen válida (JPG, PNG, WEBP).');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setProfileAvatarInput(e.target.result as string);
-      }
-    };
-    reader.readAsDataURL(file);
+    if (!user) return;
+    setIsUploadingAvatar(true);
+    try {
+      const url = await optimizeAndUploadAvatar(file, user.uid);
+      setProfileAvatarInput(url);
+    } catch (err: any) {
+      alert('Error al optimizar y subir imagen: ' + (err?.message || String(err)));
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   // Core business database rows
@@ -2118,29 +2123,39 @@ export default function App() {
                 <div
                   onDragOver={(e) => {
                     e.preventDefault();
-                    setProfileDragActive(true);
+                    if (!isUploadingAvatar) setProfileDragActive(true);
                   }}
                   onDragLeave={() => setProfileDragActive(false)}
                   onDrop={(e) => {
                     e.preventDefault();
                     setProfileDragActive(false);
+                    if (isUploadingAvatar) return;
                     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
                       handleProfileImageUpload(e.dataTransfer.files[0]);
                     }
                   }}
                   onPaste={(e) => {
+                    if (isUploadingAvatar) return;
                     if (e.clipboardData.files && e.clipboardData.files[0]) {
                       handleProfileImageUpload(e.clipboardData.files[0]);
                     }
                   }}
-                  onClick={() => profileFileRef.current?.click()}
+                  onClick={() => {
+                    if (!isUploadingAvatar) profileFileRef.current?.click();
+                  }}
                   className={`border-2 border-dashed rounded-2xl p-4 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all ${
                     profileDragActive
                       ? 'border-purple-500 bg-purple-500/10 text-white'
                       : 'border-white/10 hover:border-purple-500 bg-[#050505] text-zinc-400 hover:text-white'
-                  }`}
+                  } ${isUploadingAvatar ? 'opacity-60 cursor-wait' : ''}`}
                 >
-                  {profileAvatarInput ? (
+                  {isUploadingAvatar ? (
+                    <div className="space-y-1.5 text-center py-2 w-full animate-pulse">
+                      <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin mx-auto" />
+                      <p className="text-[11px] font-bold text-white">Optimizando y subiendo avatar...</p>
+                      <p className="text-[9px] text-zinc-500 font-mono">Formateando a 256x256 px en Storage</p>
+                    </div>
+                  ) : profileAvatarInput ? (
                     <div className="flex items-center gap-3.5 w-full">
                       <img
                         src={profileAvatarInput}

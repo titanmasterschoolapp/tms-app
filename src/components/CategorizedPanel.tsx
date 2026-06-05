@@ -35,6 +35,7 @@ import {
 } from '../types';
 import { DataAPI } from '../lib/db';
 import { formatChannelName } from '../App';
+import { optimizeAndUploadChatImage } from '../lib/imageOptimizer';
 
 interface CategorizedPanelProps {
   parentChannel: ChatChannel;
@@ -95,23 +96,26 @@ export default function CategorizedPanel({ parentChannel, currentUser, onRefresh
   const [subFormReadOnly, setSubFormReadOnly] = useState(false);
   const [isMobileListOpen, setIsMobileListOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
 
-  const handleImageFileLoad = (file: File) => {
+  const handleImageFileLoad = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Por favor selecciona un archivo de imagen válido (JPG, PNG, WEBP).');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setImageInputUrl(e.target.result as string);
-        setShowImageForm(true);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingImage(true);
+    try {
+      const url = await optimizeAndUploadChatImage(file, selectedSubChannelId || parentChannel.id);
+      setImageInputUrl(url);
+      setShowImageForm(true);
+    } catch (err: any) {
+      alert('Error al optimizar y subir la imagen: ' + (err?.message || String(err)));
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
   
   // Active Thread Reply States
@@ -1315,7 +1319,17 @@ export default function CategorizedPanel({ parentChannel, currentUser, onRefresh
                       }}
                     />
 
-                    {imageInputUrl && (
+                    {isUploadingImage && (
+                      <div className="flex items-center gap-3 p-3 bg-[#050505] border border-white/5 rounded-xl text-left animate-fadeIn">
+                        <div className="w-5 h-5 rounded-full border-2 border-purple-500 border-t-transparent animate-spin shrink-0" />
+                        <div>
+                          <span className="text-[11px] font-bold text-white block">Optimizando y subiendo imagen...</span>
+                          <span className="text-[9px] text-zinc-500 font-mono block animate-pulse">Comprimiendo y guardando en Firebase Storage</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {imageInputUrl && !isUploadingImage && (
                       <div className="flex items-center justify-between gap-4 p-3 bg-[#050505] border border-white/5 rounded-xl animate-fadeIn text-left">
                         <div className="flex items-center gap-2.5 min-w-0">
                           <img

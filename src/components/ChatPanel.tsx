@@ -26,6 +26,7 @@ import {
 import { ChatMessage, ChatChannel, UserProfile, UserRole } from '../types';
 import { DataAPI } from '../lib/db';
 import { formatChannelName } from '../App';
+import { optimizeAndUploadChatImage } from '../lib/imageOptimizer';
 
 interface ChatPanelProps {
   chatType: 'alumno' | 'comunidad';
@@ -40,23 +41,26 @@ export default function ChatPanel({ chatType, currentUser, channelId }: ChatPane
   const [imageInputUrl, setImageInputUrl] = useState('');
   const [showImageForm, setShowImageForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
 
-  const handleImageFileLoad = (file: File) => {
+  const handleImageFileLoad = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Por favor selecciona un archivo de imagen válido (JPG, PNG, WEBP).');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setImageInputUrl(e.target.result as string);
-        setShowImageForm(true);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingImage(true);
+    try {
+      const url = await optimizeAndUploadChatImage(file, activeChannelId || chatType);
+      setImageInputUrl(url);
+      setShowImageForm(true);
+    } catch (err: any) {
+      alert('Error al optimizar y subir la imagen: ' + (err?.message || String(err)));
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
   
   // Active Thread Reply States
@@ -978,7 +982,17 @@ export default function ChatPanel({ chatType, currentUser, channelId }: ChatPane
               />
 
               {/* Image upload preview */}
-              {imageInputUrl && (
+              {isUploadingImage && (
+                <div className="p-3 bg-[#050505] border border-white/5 rounded-2xl flex items-center gap-3 text-left animate-fadeIn">
+                  <div className="w-6 h-6 rounded-full border-2 border-purple-500 border-t-transparent animate-spin shrink-0" />
+                  <div>
+                    <span className="text-xs font-bold text-white block">Optimizando y subiendo imagen...</span>
+                    <span className="text-[9px] text-zinc-500 font-mono block animate-pulse">Comprimiendo y guardando en Firebase Storage</span>
+                  </div>
+                </div>
+              )}
+
+              {imageInputUrl && !isUploadingImage && (
                 <div className="p-3 bg-[#050505] border border-white/5 rounded-2xl flex items-center justify-between gap-4 text-left animate-fadeIn">
                   <div className="flex items-center gap-3 min-w-0">
                     <img

@@ -1492,15 +1492,15 @@ export const DataAPI = {
       try {
         const snap = await getDocs(collection(db, 'funding_companies'));
         const list = snap.docs.map(doc => doc.data() as FundingCompany);
-        if (list.length < SEED_FUNDING_COMPANIES.length) {
+        const hasSeededFunding = typeof window !== 'undefined' && localStorage.getItem('titan_seeded_funding_companies') === 'true';
+        if (list.length === 0 && !hasSeededFunding) {
           for (const fc of SEED_FUNDING_COMPANIES) {
-            const exists = list.some(item => item.id === fc.id);
-            if (!exists) {
-              await setDoc(doc(db, 'funding_companies', fc.id), fc);
-              list.push(fc);
-            }
+            await setDoc(doc(db, 'funding_companies', fc.id), fc);
+            list.push(fc);
           }
-          return sortCompanies(list);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('titan_seeded_funding_companies', 'true');
+          }
         }
         return sortCompanies(list);
       } catch (err) {
@@ -1508,15 +1508,16 @@ export const DataAPI = {
         return sortCompanies(SEED_FUNDING_COMPANIES);
       }
     } else {
-      const list = getLocal<FundingCompany[]>('funding_companies', SEED_FUNDING_COMPANIES);
-      if (list.length < SEED_FUNDING_COMPANIES.length) {
-        for (const fc of SEED_FUNDING_COMPANIES) {
-          const exists = list.some(item => item.id === fc.id);
-          if (!exists) {
-            list.push(fc);
-          }
+      const list = getLocal<FundingCompany[]>('funding_companies', []);
+      // If empty and not seeded, seed once
+      const hasSeededFunding = typeof window !== 'undefined' && localStorage.getItem('titan_seeded_funding_companies') === 'true';
+      if (list.length === 0 && !hasSeededFunding) {
+        const initial = [...SEED_FUNDING_COMPANIES];
+        setLocal('funding_companies', initial);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('titan_seeded_funding_companies', 'true');
         }
-        setLocal('funding_companies', list);
+        return sortCompanies(initial);
       }
       return sortCompanies(list);
     }

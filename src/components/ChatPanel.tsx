@@ -40,6 +40,24 @@ export default function ChatPanel({ chatType, currentUser, channelId }: ChatPane
   const [imageInputUrl, setImageInputUrl] = useState('');
   const [showImageForm, setShowImageForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleImageFileLoad = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor selecciona un archivo de imagen válido (JPG, PNG, WEBP).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        setImageInputUrl(e.target.result as string);
+        setShowImageForm(true);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
   
   // Active Thread Reply States
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -947,24 +965,39 @@ export default function ChatPanel({ chatType, currentUser, channelId }: ChatPane
 
             {/* Message input section */}
             <div className="p-3 border-t border-white/5 bg-[#0A0A0B] space-y-2">
-              
-              {/* Image URL preview setup */}
-              {showImageForm && (
-                <div className="p-2.5 bg-black border border-white/5 rounded-xl space-y-2 animate-fadeIn">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">Añadir enlace de captura (Lightshot/Unsplash URL)</span>
-                    <button onClick={() => setShowImageForm(false)} className="text-zinc-550 hover:text-white">
-                      <X className="w-3 h-3" />
-                    </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleImageFileLoad(e.target.files[0]);
+                  }
+                }}
+              />
+
+              {/* Image upload preview */}
+              {imageInputUrl && (
+                <div className="p-3 bg-[#050505] border border-white/5 rounded-2xl flex items-center justify-between gap-4 text-left animate-fadeIn">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img
+                      src={imageInputUrl}
+                      alt="Upload Preview"
+                      className="w-14 h-14 rounded-xl object-cover border border-white/10 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-white block truncate">Imagen adjunta</span>
+                      <span className="text-[9px] text-zinc-500 font-mono block truncate">Arrastra otra o pega capturas directamente</span>
+                    </div>
                   </div>
-                  <input
-                    id="url-input-attachments"
-                    type="url"
-                    placeholder="https://images.unsplash.com/... o enlace de Gyazo/Lightshot"
-                    value={imageInputUrl}
-                    onChange={(e) => setImageInputUrl(e.target.value)}
-                    className="w-full bg-[#050505] border border-white/10 rounded-lg p-2 text-xs focus:outline-none focus:border-purple-500 font-mono text-zinc-300"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setImageInputUrl('')}
+                    className="p-1 px-2.5 bg-rose-600/10 hover:bg-rose-500/20 text-rose-450 border border-rose-500/10 rounded-xl text-[10px] font-mono cursor-pointer transition-all"
+                  >
+                    Quitar
+                  </button>
                 </div>
               )}
 
@@ -977,15 +1010,30 @@ export default function ChatPanel({ chatType, currentUser, channelId }: ChatPane
                   </span>
                 </div>
               ) : (
-                <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                <form 
+                  onSubmit={handleSendMessage} 
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={() => setDragActive(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragActive(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      handleImageFileLoad(e.dataTransfer.files[0]);
+                    }
+                  }}
+                  className={`flex items-center gap-2 p-1 rounded-2xl transition-all ${dragActive ? 'bg-purple-600/10 ring-2 ring-purple-500/45' : ''}`}
+                >
                   <button
                     id="btn-open-image-url-attach"
                     type="button"
-                    onClick={() => setShowImageForm(!showImageForm)}
+                    onClick={() => fileInputRef.current?.click()}
                     className={`p-2.5 rounded-xl border transition-all text-zinc-400 hover:text-purple-400 hover:bg-purple-500/5 ${
                       imageInputUrl.trim() ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-zinc-950 border-white/5'
                     }`}
-                    title="Adjuntar enlace de captura técnica"
+                    title="Subir imagen desde el ordenador o arrastra aquí"
                   >
                     <ImageIcon className="w-4 h-4" />
                   </button>
@@ -994,8 +1042,13 @@ export default function ChatPanel({ chatType, currentUser, channelId }: ChatPane
                     id="chat-main-text-input"
                     type="text"
                     required={!imageInputUrl.trim()}
-                    placeholder={imageInputUrl.trim() ? "Imagen lista para adjuntar. Presiona Enviar" : "Escribe un mensaje aquí..."}
+                    placeholder={imageInputUrl.trim() ? "Imagen lista para adjuntar. Presiona Enviar" : "Escribe un mensaje aquí... (o pega una captura)"}
                     value={inputText}
+                    onPaste={(e) => {
+                      if (e.clipboardData.files && e.clipboardData.files[0]) {
+                        handleImageFileLoad(e.clipboardData.files[0]);
+                      }
+                    }}
                     onChange={(e) => setInputText(e.target.value)}
                     className="flex-1 bg-zinc-950 border border-white/5 focus:outline-none focus:border-purple-500 rounded-xl py-2.5 px-4 text-xs text-white placeholder-zinc-600"
                   />

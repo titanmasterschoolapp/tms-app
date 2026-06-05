@@ -96,6 +96,24 @@ export default function CategorizedPanel({ parentChannel, currentUser, onRefresh
   const [isMobileListOpen, setIsMobileListOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleImageFileLoad = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor selecciona un archivo de imagen válido (JPG, PNG, WEBP).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        setImageInputUrl(e.target.result as string);
+        setShowImageForm(true);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+  
   // Active Thread Reply States
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadText, setThreadText] = useState('');
@@ -1285,11 +1303,46 @@ export default function CategorizedPanel({ parentChannel, currentUser, onRefresh
                       </div>
                     )}
 
-                    {showImageForm && (
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleImageFileLoad(e.target.files[0]);
+                        }
+                      }}
+                    />
+
+                    {imageInputUrl && (
+                      <div className="flex items-center justify-between gap-4 p-3 bg-[#050505] border border-white/5 rounded-xl animate-fadeIn text-left">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img
+                            src={imageInputUrl}
+                            alt="Upload preview"
+                            className="w-12 h-12 rounded-lg object-cover border border-white/10 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-bold text-white block truncate">Imagen adjunta</span>
+                            <span className="text-[9px] text-zinc-500 font-mono block truncate font-semibold">Cargada con éxito. Listo para enviar</span>
+                          </div>
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={() => { setImageInputUrl(''); setShowImageForm(false); }}
+                          className="text-xs text-rose-400 hover:text-rose-300 font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-lg cursor-pointer transition-all"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    )}
+
+                    {showImageForm && !imageInputUrl && (
                       <div className="flex items-center gap-1.5 bg-zinc-950 border border-white/5 p-2 rounded-xl">
                         <input
-                          type="url"
-                          placeholder="Inserta el URL de tu imagen de análisis (ej: Discord o Lightshot)..."
+                          type="text"
+                          placeholder="Introduce un enlace URL o selecciona archivo con el botón de abajo..."
                           value={imageInputUrl}
                           onChange={(e) => setImageInputUrl(e.target.value)}
                           className="flex-1 bg-transparent text-[11px] text-white focus:outline-none font-sans"
@@ -1332,12 +1385,35 @@ export default function CategorizedPanel({ parentChannel, currentUser, onRefresh
                       </div>
                     )}
  
-                    <div className="flex items-center gap-2 bg-[#0C0C0E] border border-white/5 rounded-2xl p-1.5 px-3">
+                    <div 
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragActive(true);
+                      }}
+                      onDragLeave={() => setDragActive(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragActive(false);
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          handleImageFileLoad(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      className={`flex items-center gap-2 bg-[#0C0C0E] border border-white/5 rounded-2xl p-1.5 px-3 transition-all ${
+                        dragActive ? 'ring-2 ring-purple-500/40 bg-purple-500/5' : ''
+                      }`}
+                    >
                       <button
                         type="button"
-                        onClick={() => { setShowImageForm(!showImageForm); setShowDocumentForm(false); }}
-                        className={`p-1.5 rounded-xl cursor-pointer transition-all shrink-0 ${showImageForm ? 'text-purple-400 bg-white/5' : 'text-slate-450 hover:text-purple-400 hover:bg-white/5'}`}
-                        title="Sube imagen"
+                        onClick={() => {
+                          if (fileInputRef.current) {
+                            fileInputRef.current.click();
+                          } else {
+                            setShowImageForm(!showImageForm);
+                          }
+                          setShowDocumentForm(false);
+                        }}
+                        className={`p-1.5 rounded-xl cursor-pointer transition-all shrink-0 ${showImageForm || imageInputUrl ? 'text-purple-400 bg-white/5' : 'text-slate-450 hover:text-purple-400 hover:bg-white/5'}`}
+                        title="Selecciona una imagen desde tu ordenador o arrástrala aquí"
                       >
                         <ImageIcon className="w-4 h-4" />
                       </button>
@@ -1353,8 +1429,13 @@ export default function CategorizedPanel({ parentChannel, currentUser, onRefresh
  
                       <input
                         type="text"
-                        placeholder={`Escribe un mensaje de debate en #${activeSubChannelObj?.name}...`}
+                        placeholder={imageInputUrl ? "Imagen adjunta lista. Escribe un mensaje (opcional) y presiona Enviar" : `Escribe un mensaje de debate en #${activeSubChannelObj?.name}... (o pega una captura)`}
                         value={inputText}
+                        onPaste={(e) => {
+                          if (e.clipboardData.files && e.clipboardData.files[0]) {
+                            handleImageFileLoad(e.clipboardData.files[0]);
+                          }
+                        }}
                         onChange={(e) => setInputText(e.target.value)}
                         className="flex-1 bg-transparent border-none text-[12px] text-white placeholder-slate-705 focus:outline-none font-sans py-1.5 px-2.5"
                       />

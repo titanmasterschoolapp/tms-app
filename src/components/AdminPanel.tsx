@@ -1113,8 +1113,8 @@ export default function AdminPanel({ currentUser }: AdminPanelProps) {
                 <label className="block text-zinc-500 mb-1">Enlace de Zoom / Meet</label>
                 <input
                   id="meet-form-link"
-                  type="url"
-                  placeholder="https://zoom.us/..."
+                  type="text"
+                  placeholder="https://zoom.us/ o Se enviará por email o Sala presencial..."
                   value={meetingForm.link}
                   onChange={(e) => setMeetingForm({ ...meetingForm, link: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-white font-mono"

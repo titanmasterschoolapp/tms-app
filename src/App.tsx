@@ -126,6 +126,22 @@ export default function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileNameInput, setProfileNameInput] = useState('');
   const [profileAvatarInput, setProfileAvatarInput] = useState('');
+  const profileFileRef = React.useRef<HTMLInputElement>(null);
+  const [profileDragActive, setProfileDragActive] = useState(false);
+
+  const handleProfileImageUpload = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor selecciona una imagen válida (JPG, PNG, WEBP).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        setProfileAvatarInput(e.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Core business database rows
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -396,16 +412,29 @@ export default function App() {
 
   useEffect(() => {
     if (companies.length > 0) {
-      if (!dashCompany1Id) {
-        const val = localStorage.getItem('TM_dashCompany1Id') || companies[0].id;
+      const active1Id = localStorage.getItem('TM_dashCompany1Id') || dashCompany1Id;
+      const active2Id = localStorage.getItem('TM_dashCompany2Id') || dashCompany2Id;
+      const validCompany1 = companies.some(c => c.id === active1Id);
+      const validCompany2 = companies.some(c => c.id === active2Id);
+
+      if (!active1Id || !validCompany1) {
+        const val = companies[0].id;
         setDashCompany1Id(val);
         localStorage.setItem('TM_dashCompany1Id', val);
+      } else if (dashCompany1Id !== active1Id) {
+        setDashCompany1Id(active1Id);
       }
-      if (!dashCompany2Id) {
-        const val = localStorage.getItem('TM_dashCompany2Id') || companies[1]?.id || companies[0].id;
+
+      if (!active2Id || !validCompany2) {
+        const val = companies[1]?.id || companies[0].id;
         setDashCompany2Id(val);
         localStorage.setItem('TM_dashCompany2Id', val);
+      } else if (dashCompany2Id !== active2Id) {
+        setDashCompany2Id(active2Id);
       }
+    } else {
+      if (dashCompany1Id) setDashCompany1Id('');
+      if (dashCompany2Id) setDashCompany2Id('');
     }
   }, [companies, dashCompany1Id, dashCompany2Id]);
 
@@ -1549,15 +1578,21 @@ export default function App() {
                             </div>
                           </div>
 
-                          <a
-                            id={`meet-link-btn-${m.id}`}
-                            href={m.link}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="w-full sm:w-auto py-2.5 px-5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-1 text-[11px] cursor-pointer"
-                          >
-                            INGRESAR A LA CLASE <ArrowUpRight className="w-4 h-4" />
-                          </a>
+                          {m.link.toLowerCase().startsWith('http') || m.link.toLowerCase().includes('.') ? (
+                            <a
+                              id={`meet-link-btn-${m.id}`}
+                              href={m.link.toLowerCase().startsWith('www') ? `https://${m.link}` : m.link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="w-full sm:w-auto py-2.5 px-5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-1 text-[11px] cursor-pointer"
+                            >
+                              INGRESAR A LA CLASE <ArrowUpRight className="w-4 h-4" />
+                            </a>
+                          ) : (
+                            <div className="w-full sm:w-auto py-2 px-4 bg-zinc-900 border border-zinc-800 text-zinc-400 font-mono rounded-xl text-center text-[10px] uppercase font-bold tracking-wide">
+                              {m.link}
+                            </div>
+                          )}
                         </div>
                       ))
                     )}
@@ -1746,15 +1781,21 @@ export default function App() {
                           </div>
                         </div>
 
-                        <a
-                          id={`com-meet-link-btn-${m.id}`}
-                          href={m.link}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="w-full sm:w-auto py-2.5 px-5 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-1 text-[11px] cursor-pointer"
-                        >
-                          INGRESAR A LA CLASE VIP <ArrowUpRight className="w-4 h-4" />
-                        </a>
+                        {m.link.toLowerCase().startsWith('http') || m.link.toLowerCase().includes('.') ? (
+                          <a
+                            id={`com-meet-link-btn-${m.id}`}
+                            href={m.link.toLowerCase().startsWith('www') ? `https://${m.link}` : m.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="w-full sm:w-auto py-2.5 px-5 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-1 text-[11px] cursor-pointer"
+                          >
+                            INGRESAR A LA CLASE VIP <ArrowUpRight className="w-4 h-4" />
+                          </a>
+                        ) : (
+                          <div className="w-full sm:w-auto py-2 px-4 bg-zinc-900 border border-zinc-800 text-pink-400 font-mono rounded-xl text-center text-[10px] uppercase font-bold tracking-wide">
+                            {m.link}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
@@ -2058,17 +2099,92 @@ export default function App() {
                 />
               </div>
 
-              {/* Input for avatarUrl */}
-              <div className="space-y-1">
-                <label className="text-zinc-400 font-bold font-sans">URL de la Foto de Perfil</label>
+              {/* Input for avatarUrl & File Upload */}
+              <div className="space-y-2 text-left">
+                <label className="text-zinc-400 font-bold font-sans block">Foto de Perfil / Avatar</label>
+                
                 <input
-                  id="profile-avatar-edit-input"
-                  type="url"
-                  placeholder="https://images.unsplash.com/... o presiona un avatar abajo"
-                  value={profileAvatarInput}
-                  onChange={(e) => setProfileAvatarInput(e.target.value)}
-                  className="w-full bg-[#050505] border border-white/10 rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-purple-500 font-mono text-[11px]"
+                  type="file"
+                  ref={profileFileRef}
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleProfileImageUpload(e.target.files[0]);
+                    }
+                  }}
                 />
+
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setProfileDragActive(true);
+                  }}
+                  onDragLeave={() => setProfileDragActive(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setProfileDragActive(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      handleProfileImageUpload(e.dataTransfer.files[0]);
+                    }
+                  }}
+                  onPaste={(e) => {
+                    if (e.clipboardData.files && e.clipboardData.files[0]) {
+                      handleProfileImageUpload(e.clipboardData.files[0]);
+                    }
+                  }}
+                  onClick={() => profileFileRef.current?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-4 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all ${
+                    profileDragActive
+                      ? 'border-purple-500 bg-purple-500/10 text-white'
+                      : 'border-white/10 hover:border-purple-500 bg-[#050505] text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  {profileAvatarInput ? (
+                    <div className="flex items-center gap-3.5 w-full">
+                      <img
+                        src={profileAvatarInput}
+                        alt="Preview"
+                        className="w-12 h-12 rounded-full object-cover border border-purple-500/30 shadow-md"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="flex-1 min-w-0 text-left">
+                        <span className="text-xs font-bold text-white block">¡Imagen Cargada!</span>
+                        <span className="text-[9px] text-zinc-500 font-mono block">Arrastra otra o haz clic para cambiar</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProfileAvatarInput('');
+                        }}
+                        className="text-[10px] text-zinc-500 hover:text-rose-450 font-mono uppercase bg-zinc-900 border border-white/5 rounded-lg px-2 py-1"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-center py-2 w-full">
+                      <div className="w-10 h-10 rounded-full bg-zinc-900 border border-white/5 flex items-center justify-center mx-auto text-purple-400">
+                        📁
+                      </div>
+                      <p className="text-[11px] font-bold text-white">Selecciona o arrastra una imagen</p>
+                      <p className="text-[9px] text-zinc-500 font-mono">Soporta JPG, PNG o WEBP. También puedes pegarla.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-1">
+                  <span className="text-[9px] text-zinc-500 font-mono">O introduce una enlace URL si lo prefieres:</span>
+                  <input
+                    id="profile-avatar-edit-input"
+                    type="text"
+                    placeholder="https://..."
+                    value={profileAvatarInput.startsWith('data:') ? '' : profileAvatarInput}
+                    onChange={(e) => setProfileAvatarInput(e.target.value)}
+                    className="w-full bg-[#050505] border border-white/10 rounded-xl py-2 px-3 mt-1 text-zinc-300 focus:outline-none focus:border-purple-500 font-mono text-[10px]"
+                  />
+                </div>
               </div>
 
               {/* Quick Stock presets */}

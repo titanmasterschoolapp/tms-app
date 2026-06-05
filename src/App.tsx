@@ -130,35 +130,53 @@ export default function App() {
   const profileFileRef = React.useRef<HTMLInputElement>(null);
   const [profileDragActive, setProfileDragActive] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUploadStatus, setAvatarUploadStatus] = useState('Optimizando avatar...');
 
   const handleProfileImageUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Por favor selecciona una imagen válida (JPG, PNG, WEBP).');
       return;
     }
-    if (!user) return;
+    if (!user) {
+      console.error('[Avatar] El usuario actual no está autenticado o cargado.');
+      return;
+    }
     setIsUploadingAvatar(true);
+    setAvatarUploadStatus('Archivo seleccionado...');
+    console.log('[Avatar] Archivo seleccionado');
     try {
-      const url = await optimizeAndUploadAvatar(file, user.uid);
+      // Calls optimizeAndUploadAvatar with progress callback mapping directly to UI status text
+      const url = await optimizeAndUploadAvatar(file, user.uid, (statusText) => {
+        setAvatarUploadStatus(statusText);
+      });
+      
+      // Update local state with upload url
       setProfileAvatarInput(url);
       
-      // Auto save the changes to the user's profile and state immediately
+      console.log('[Avatar] updateDoc iniciado');
+      setAvatarUploadStatus('Cerrando y guardando cambios...');
       const updated = {
         ...user,
-        avatarUrl: url
+        avatarUrl: url || ""
       };
+      
+      // Prevent Firestore write locks or infinite waiting with a 10s maximum timeout limit
+      await Promise.race([
+        DataAPI.updateUserProfile(updated),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('La actualización en Firestore superó el límite de espera (10s).')), 10000))
+      ]);
+      console.log('[Avatar] updateDoc completado');
       
       // Update global user state (so profile photo updates visible indicators instantly)
       setUser(updated);
-      
-      // Update DB
-      await DataAPI.updateUserProfile(updated);
+      console.log('[Avatar] Estado local actualizado');
       
       // Close profile modal window automatically
       setIsEditingProfile(false);
+      console.log('[Avatar] Modal cerrado');
     } catch (err: any) {
-      console.error('Error uploading/optimizing avatar:', err);
-      alert('No se ha podido subir la imagen. Inténtalo de nuevo.');
+      console.error('[Avatar] Error crítico durante la subida/optimización del avatar:', err);
+      alert('No se ha podido subir la imagen. Inténtalo de nuevo. Detalle: ' + (err?.message || String(err)));
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -2168,8 +2186,8 @@ export default function App() {
                   {isUploadingAvatar ? (
                     <div className="space-y-1.5 text-center py-2 w-full animate-pulse">
                       <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin mx-auto" />
-                      <p className="text-[11px] font-bold text-white">Optimizando y subiendo avatar...</p>
-                      <p className="text-[9px] text-zinc-500 font-mono">Formateando a 256x256 px en Storage</p>
+                      <p className="text-[11px] font-bold text-white">{avatarUploadStatus}</p>
+                      <p className="text-[9px] text-zinc-500 font-mono">Espere unos segundos...</p>
                     </div>
                   ) : profileAvatarInput ? (
                     <div className="flex items-center gap-3.5 w-full">

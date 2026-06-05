@@ -840,7 +840,8 @@ export const DataAPI = {
   updateUserProfile: async (updatedUser: UserProfile): Promise<void> => {
     if (isFirebaseConfigured && db) {
       try {
-        await setDoc(doc(db, 'users', updatedUser.uid), updatedUser, { merge: true });
+        const cleaned = cleanFirestoreData(updatedUser);
+        await setDoc(doc(db, 'users', updatedUser.uid), cleaned, { merge: true });
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `users/${updatedUser.uid}`);
         throw err;
@@ -1941,6 +1942,7 @@ export const DataAPI = {
       id: 'rep_' + Math.random().toString(36).substr(2, 9),
       userName: user.displayName,
       userRole: user.role,
+      avatarUrl: user.avatarUrl || "",
       text: replyText,
       createdAt: new Date().toISOString(),
       userId: user.uid,
@@ -1954,7 +1956,7 @@ export const DataAPI = {
         if (snap.exists()) {
           const topic = snap.data() as ResourceTopic;
           const replies = topic.replies || [];
-          replies.push(reply);
+          replies.push(cleanFirestoreData(reply));
           await updateDoc(topicRef, { replies });
         }
       } catch (err) {
@@ -1989,6 +1991,7 @@ export const DataAPI = {
       id: 'rep_' + Math.random().toString(36).substr(2, 9),
       userName: user.displayName,
       userRole: user.role,
+      avatarUrl: user.avatarUrl || "",
       text: replyText,
       createdAt: new Date().toISOString(),
       userId: user.uid,
@@ -2002,7 +2005,7 @@ export const DataAPI = {
         if (snap.exists()) {
           const topic = snap.data() as ToolTopic;
           const replies = topic.replies || [];
-          replies.push(reply);
+          replies.push(cleanFirestoreData(reply));
           await updateDoc(topicRef, { replies });
         }
       } catch (err) {

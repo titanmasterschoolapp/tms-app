@@ -141,8 +141,24 @@ export default function App() {
     try {
       const url = await optimizeAndUploadAvatar(file, user.uid);
       setProfileAvatarInput(url);
+      
+      // Auto save the changes to the user's profile and state immediately
+      const updated = {
+        ...user,
+        avatarUrl: url
+      };
+      
+      // Update global user state (so profile photo updates visible indicators instantly)
+      setUser(updated);
+      
+      // Update DB
+      await DataAPI.updateUserProfile(updated);
+      
+      // Close profile modal window automatically
+      setIsEditingProfile(false);
     } catch (err: any) {
-      alert('Error al optimizar y subir imagen: ' + (err?.message || String(err)));
+      console.error('Error uploading/optimizing avatar:', err);
+      alert('No se ha podido subir la imagen. Inténtalo de nuevo.');
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -2216,7 +2232,18 @@ export default function App() {
                       id={`preset-avatar-${i}`}
                       key={pres.label}
                       type="button"
-                      onClick={() => setProfileAvatarInput(pres.url)}
+                      onClick={async () => {
+                        setProfileAvatarInput(pres.url);
+                        if (user) {
+                          const updated = {
+                            ...user,
+                            avatarUrl: pres.url
+                          };
+                          setUser(updated);
+                          await DataAPI.updateUserProfile(updated);
+                          setIsEditingProfile(false);
+                        }
+                      }}
                       className={`p-1.5 bg-[#050505] border border-white/5 hover:border-purple-500 rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer text-center group transition-all text-[9.5px] ${profileAvatarInput === pres.url ? 'border-purple-500 bg-purple-500/5' : ''}`}
                     >
                       <img 

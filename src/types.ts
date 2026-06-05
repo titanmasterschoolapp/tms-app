@@ -69,6 +69,7 @@ export interface ResourceReply {
   id: string;
   userName: string;
   userRole: UserRole;
+  avatarUrl?: string;
   text: string;
   createdAt: string;
   userId?: string;
@@ -99,6 +100,7 @@ export interface ToolReply {
   id: string;
   userName: string;
   userRole: UserRole;
+  avatarUrl?: string;
   text: string;
   createdAt: string;
   userId?: string;
